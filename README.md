@@ -28,6 +28,7 @@ npm run preview  # pokreće gotovi build
 | `Razmak` | kočnica |
 | `N` | ispočetka |
 | `P` | pauza |
+| `M` | zvuk uključen / isključen |
 | `H` | pomoć |
 
 Kontrole nisu obrnute kao u pravom avionu: `↑` diže nos.
@@ -43,6 +44,7 @@ src/
   world/World.ts          – livada, pista, šume, sela, oblaci, svjetlo
   camera/ChaseCamera.ts   – kamera iza aviona, horizont uvijek ravan
   ui/HUD.ts               – brzina, visina, gas, poruke, pomoć
+  audio/Sound.ts          – motor, vjetar, kotači, upozorenje, efekti (Web Audio, bez datoteka)
 ```
 
 **Fizika za djecu:** avion leti kamo gleda nos. Kad pustiš tipke, sam se izravna.

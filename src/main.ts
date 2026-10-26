@@ -1,5 +1,6 @@
 import { ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Scene, Timer, Vector3, WebGLRenderer } from 'three';
 import { Aircraft } from './aircraft/Aircraft';
+import { Sound } from './audio/Sound';
 import { ChaseCamera } from './camera/ChaseCamera';
 import { Input } from './core/Input';
 import { FlightModel } from './physics/FlightModel';
@@ -29,6 +30,7 @@ const hud = new HUD();
 const model = new FlightModel();
 const aircraft = new Aircraft();
 const chase = new ChaseCamera(camera);
+const sound = new Sound();
 scene.add(aircraft.object);
 
 let started = false;
@@ -50,6 +52,7 @@ respawn();
 function start(): void {
   if (started) return;
   started = true;
+  sound.start(); // must happen inside the click / key press, or the browser keeps it silent
   document.getElementById('start')!.classList.add('hidden');
   hud.flash('Drži R za gas! 🚀', timer.getElapsed(), 3);
 }
@@ -70,11 +73,14 @@ function handleEvents(events: string[], now: number): void {
       if (!hasFlown) hud.hideHelp(); // out of the way once they've got it; H brings it back
       hud.flash(hasFlown ? 'Opet letiš! ✈️' : 'Bravo, letiš! 🎉', now);
       hasFlown = true;
+      sound.takeoff();
     } else if (event === 'touchdown') {
       hud.flash('Sletio si! 👍', now);
+      sound.touchdown();
     } else if (event === 'crash') {
       hud.flash('Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
+      sound.crash();
     }
   }
 }
@@ -102,7 +108,11 @@ function frame(time: number): void {
 
   if (input.wasTapped('KeyH')) hud.toggleHelp();
   if (started) {
-    if (input.wasTapped('KeyP')) paused = !paused;
+    if (input.wasTapped('KeyP')) {
+      paused = !paused;
+      sound.setPaused(paused);
+    }
+    if (input.wasTapped('KeyM')) hud.flash(sound.toggleMute() ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);
     if (input.wasTapped('KeyN')) respawn();
   }
 
@@ -116,6 +126,7 @@ function frame(time: number): void {
     if (now >= respawnAt) respawn();
     aircraft.update(model, dt);
     chase.update(model, dt);
+    sound.update(model);
   }
   input.endFrame();
 
