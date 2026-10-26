@@ -8,6 +8,7 @@ import {
   HemisphereLight,
   IcosahedronGeometry,
   InstancedMesh,
+  Material,
   Matrix4,
   Mesh,
   MeshStandardMaterial,
@@ -67,13 +68,14 @@ export class World {
       new MeshStandardMaterial({ color: 0x7cc35a, roughness: 1 }),
     );
     ground.receiveShadow = true;
+    groundLayer(ground, -3);
     this.scene.add(ground);
 
     // Patchwork fields make it much easier to see how fast you are moving.
     const fieldColors = [0x9bd770, 0x6aab45, 0xe9d985, 0xb5e48c, 0x8fbf5a];
     const fields = new InstancedMesh(
       new PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-      new MeshStandardMaterial({ roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }),
+      new MeshStandardMaterial({ roughness: 1 }),
       600,
     );
     const m = new Matrix4();
@@ -91,6 +93,7 @@ export class World {
       fields.setColorAt(i, color.setHex(fieldColors[i % fieldColors.length]));
     }
     fields.receiveShadow = true;
+    groundLayer(fields, -2);
     this.scene.add(fields);
   }
 
@@ -100,6 +103,7 @@ export class World {
     const runway = new Mesh(new BoxGeometry(width, 0.04, length), new MeshStandardMaterial({ color: 0x4a4e57, roughness: 0.9 }));
     runway.position.set(0, 0.02, centerZ);
     runway.receiveShadow = true;
+    groundLayer(runway, -1);
     this.scene.add(runway);
 
     const white = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
@@ -229,6 +233,16 @@ export class World {
     }
     this.scene.add(puffs);
   }
+}
+
+/**
+ * Flat layers lying on the ground (grass, fields, runway) skip the depth buffer and are
+ * drawn bottom-up in `order`, so they can never z-fight or hide one another. The huge
+ * ground plane otherwise covered the runway on some GPUs.
+ */
+function groundLayer(mesh: Mesh, order: number): void {
+  mesh.renderOrder = order;
+  (mesh.material as Material).depthWrite = false;
 }
 
 function nearRunway(x: number, z: number, margin: number): boolean {
