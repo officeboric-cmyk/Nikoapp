@@ -1,10 +1,14 @@
 import { ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Scene, Timer, WebGLRenderer } from 'three';
 import { Aircraft } from './aircraft/Aircraft';
+import { airlineById } from './aircraft/airlines';
 import { AIRCRAFT } from './aircraft/catalog';
 import { Sound } from './audio/Sound';
 import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
 import { Input } from './core/Input';
-import { scoreLanding } from './game/landing';
+import { hillAhead } from './game/hillWarning';
+import { scoreLanding, starText } from './game/landing';
+import { MissionRun, type MissionResult, type MissionUpdate } from './game/MissionRun';
+import { MISSIONS, type MissionDef } from './game/missions';
 import { Progress } from './game/Progress';
 import { FlightModel, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
 import { HUD } from './ui/HUD';
@@ -53,16 +57,72 @@ let paused = false;
 let hasFlown = false;
 let respawnAt = Infinity;
 let accumulator = 0;
+let mission: MissionRun | null = null;
 
-const menu = new Menu(AIRCRAFT, terrain.airports, (picked) => {
-  // Runs inside the click / key press, so the browser lets the sound start.
+const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, startFreeFlight, startMission);
+const missionDone = document.getElementById('mission-done')!;
+
+function startFreeFlight(picked: Choice): void {
+  endMission();
+  begin(picked);
+  const who = picked.aircraft.liveries ? `${picked.aircraft.name} ${picked.airline.name}` : picked.aircraft.name;
+  hud.flash(`${who} je spreman! ${say('Drži R za gas', 'Povuci GAS gore')} 🚀`, timer.getElapsed(), 3);
+}
+
+function startMission(def: MissionDef): void {
+  endMission();
+  const picked: Choice = {
+    aircraft: AIRCRAFT.find((a) => a.id === def.aircraft)!,
+    airline: airlineById(def.airline),
+    airport: terrain.airports.find((a) => a.name === def.start)!,
+  };
+  begin(picked);
+  mission = new MissionRun(def, scene, terrain, picked.airport);
+  hud.flash(`${def.emoji} ${def.brief}`, timer.getElapsed(), 5);
+}
+
+/** Runs inside the click / key press that started the flight, so the browser lets the sound start. */
+function begin(picked: Choice): void {
   sound.start();
   setup(picked);
   started = true;
   setPaused(false);
-  const who = picked.aircraft.liveries ? `${picked.aircraft.name} ${picked.airline.name}` : picked.aircraft.name;
-  hud.flash(`${who} je spreman! ${say('Drži R za gas', 'Povuci GAS gore')} 🚀`, timer.getElapsed(), 3);
   if (touch.enabled) goFullscreen();
+}
+
+function endMission(): void {
+  mission?.dispose();
+  mission = null;
+  missionDone.classList.add('hidden');
+}
+
+function applyMission(update: MissionUpdate | null, now: number): void {
+  if (!update) return;
+  if (update.message) hud.flash(update.message, now, 2.5, update.warn);
+  if (update.done) completeMission(update.done);
+}
+
+function completeMission(result: MissionResult): void {
+  const def = mission!.def;
+  const record = progress.recordMission(def.id, result.stars);
+  document.getElementById('md-title')!.textContent = `${def.emoji} ${def.title}`;
+  document.getElementById('md-stars')!.textContent = starText(result.stars);
+  document.getElementById('md-detail')!.textContent = record ? `${result.detail} · Novi rekord!` : result.detail;
+  missionDone.classList.remove('hidden');
+  setPaused(true);
+  sound.reward();
+}
+
+document.getElementById('md-again')!.addEventListener('click', () => startMission(mission!.def));
+document.getElementById('md-missions')!.addEventListener('click', () => {
+  endMission();
+  menu.show('missions');
+});
+document.getElementById('md-free')!.addEventListener('click', () => {
+  // Carry on flying freely from where the mission ended.
+  dropFocus();
+  endMission();
+  setPaused(false);
 });
 
 /** Picks the keyboard or the touch wording for a tip. */
@@ -101,6 +161,7 @@ function setup(picked: Choice): void {
 function respawn(): void {
   model.reset(choice.airport.spawnPoint(), choice.airport.heading);
   progress.discover(choice.airport.name); // the island you start on doesn't need discovering
+  mission?.restart();
   aircraft!.update(model, 0);
   rig.snap(model);
   touch.reset();
@@ -134,7 +195,10 @@ function cycleCamera(): void {
 
 function toggleMenu(): void {
   dropFocus();
-  if (!menu.visible) {
+  if (!missionDone.classList.contains('hidden')) {
+    endMission();
+    menu.show('missions');
+  } else if (!menu.visible) {
     setPaused(true);
     menu.show();
   } else if (started) {
@@ -146,7 +210,7 @@ function toggleMenu(): void {
 
 window.addEventListener('keydown', (e) => {
   // Starting from a key press (not the frame loop) keeps it a user gesture, which the sound needs.
-  if (menu.visible && e.code === 'Enter') menu.start();
+  if (menu.freeFlightOpen && e.code === 'Enter') menu.start();
 });
 
 window.addEventListener('resize', () => {
@@ -168,12 +232,13 @@ function handleEvents(events: FlightEvent[], now: number): void {
       hud.flash(record ? `${landing.text} Novi rekord!` : landing.text, now, 3.5);
       if (record) sound.reward();
       else sound.touchdown();
+      if (mission) applyMission(mission.onLanding(landing), now);
     } else if (event === 'crash') {
-      hud.flash('Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
+      hud.flash(mission ? 'Bum! Misija kreće ispočetka…' : 'Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
       sound.crash();
     } else if (event === 'splash') {
-      hud.flash('Pljus! 🌊 Ovaj avion ne zna plivati. Idemo opet…', now, RESPAWN_DELAY, true);
+      hud.flash(`Pljus! 🌊 Ovaj avion ne zna plivati. ${mission ? 'Misija kreće ispočetka…' : 'Idemo opet…'}`, now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
       sound.splash();
     }
@@ -190,8 +255,9 @@ function checkDiscovery(now: number): void {
   }
 }
 
-/** Where the arrow at the top points: the nearest airport, once it is far enough away to need finding. */
+/** Where the arrow at the top points: the mission's goal, or else the nearest airport once it is far enough away. */
 function currentTarget(): Target | null {
+  if (mission) return mission.target(model);
   const { airport, distance } = terrain.nearestAirport(model.position.x, model.position.z);
   if (distance < SHOW_AIRPORT_BEYOND) return null;
   return { name: `✈ ${airport.name}`, x: airport.center.x, z: airport.center.z };
@@ -203,6 +269,7 @@ function updateHint(now: number): void {
   if (paused) return hud.hint(say('Pauza — pritisni P za nastavak', 'Pauza — dodirni ⏸ za nastavak'), now);
   if (model.crashed) return hud.hint(null, now);
   if (model.stalled) return hud.hint(say('Presporo! Dodaj gas (R) i spusti nos', 'Presporo! Dodaj gas i spusti nos'), now, true);
+  if (hillAhead(model, terrain)) return hud.hint(say('⛰️ Pazi, brdo! Povuci gore (W)!', '⛰️ Pazi, brdo! Gurni palicu gore!'), now, true);
   if (model.onGround && !hasFlown) {
     if (model.throttle < 0.3 && model.speed < 5) return hud.hint(`${say('Drži R za gas', 'Povuci GAS gore')}! 🚀`, now);
     if (model.speed >= model.spec.rotateSpeed) return hud.hint(say('Sad drži W ili ↑ i poleti!', 'Sad gurni palicu gore i poleti!'), now);
@@ -223,7 +290,7 @@ function frame(time: number): void {
 
   if (input.wasTapped('KeyH')) hud.toggleHelp();
   if (input.wasTapped('Escape')) toggleMenu();
-  const playing = started && !menu.visible;
+  const playing = started && !menu.visible && missionDone.classList.contains('hidden');
   if (playing) {
     if (input.wasTapped('KeyC')) cycleCamera();
     if (input.wasTapped('KeyP')) setPaused(!paused);
@@ -239,6 +306,7 @@ function frame(time: number): void {
       accumulator -= PHYSICS_STEP;
     }
     if (now >= respawnAt) respawn();
+    if (mission && !model.crashed) applyMission(mission.update(dt, model), now);
     checkDiscovery(now);
     aircraft!.update(model, dt);
     rig.update(model, dt);
@@ -251,8 +319,9 @@ function frame(time: number): void {
   world.update(model.position);
   updateHint(now);
   hud.update(model, now, model.position.y - model.spec.gearHeight - below);
-  minimap.update(model, traffic.positions);
-  instruments.update(model, started ? currentTarget() : null);
+  const target = started ? currentTarget() : null;
+  minimap.update(model, traffic.positions, mission ? target : null);
+  instruments.update(model, target);
   touch.update(model.throttle);
   renderer.render(scene, camera);
 }

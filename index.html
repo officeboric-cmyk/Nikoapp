@@ -81,16 +81,39 @@
     <div id="menu">
       <div class="menu-card">
         <h1>✈️ Niko Leti</h1>
-        <p>Leti između 12 otoka!</p>
-        <h2>1. Odaberi avion</h2>
-        <div id="menu-aircraft" class="choices"></div>
-        <div id="menu-airline-box">
-          <h2>Aviokompanija</h2>
-          <div id="menu-airlines" class="choices airports"></div>
+        <p id="menu-progress">Leti između 12 otoka!</p>
+        <div class="tabs">
+          <button class="tab" type="button" data-tab="missions">🎯 Misije</button>
+          <button class="tab" type="button" data-tab="free">✈ Slobodno letenje</button>
         </div>
-        <h2>2. Odaberi aerodrom</h2>
-        <div id="menu-airports" class="choices airports"></div>
-        <button id="start-btn" type="button">Kreni!</button>
+        <div id="tab-missions" class="tab-page">
+          <div id="menu-missions" class="choices missions"></div>
+        </div>
+        <div id="tab-free" class="tab-page">
+          <h2>1. Odaberi avion</h2>
+          <div id="menu-aircraft" class="choices"></div>
+          <div id="menu-airline-box">
+            <h2>Aviokompanija</h2>
+            <div id="menu-airlines" class="choices airports"></div>
+          </div>
+          <h2>2. Odaberi aerodrom</h2>
+          <div id="menu-airports" class="choices airports"></div>
+          <button id="start-btn" type="button">Kreni!</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="mission-done" class="hidden">
+      <div class="menu-card">
+        <h1>🎉 Misija uspjela!</h1>
+        <p id="md-title"></p>
+        <div id="md-stars"></div>
+        <p id="md-detail"></p>
+        <div class="md-buttons">
+          <button id="md-again" class="big-btn" type="button">↻ Ponovi</button>
+          <button id="md-missions" class="big-btn" type="button">🎯 Misije</button>
+          <button id="md-free" class="big-btn" type="button">✈ Leti dalje</button>
+        </div>
       </div>
     </div>
 

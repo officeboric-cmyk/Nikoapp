@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import type { FlightModel } from '../physics/FlightModel';
+import type { Target } from './Instruments';
 import { MAP_HALF_SIZE } from '../world/islands';
 import type { Terrain } from '../world/Terrain';
 
@@ -49,10 +50,19 @@ export class Minimap {
     }
   }
 
-  /** `others` are the other planes in the sky, drawn as small white dots. */
-  update(model: FlightModel, others: Vector3[] = []): void {
+  /** `others` are the other planes in the sky (small white dots); `goal` is the mission's goal (orange ring). */
+  update(model: FlightModel, others: Vector3[] = [], goal: Target | null = null): void {
     const ctx = this.ctx;
     ctx.drawImage(this.background, 0, 0);
+
+    if (goal) {
+      const [gx, gy] = this.toMap(goal.x, goal.z);
+      ctx.strokeStyle = '#ff8c42';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(gx, gy, 6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#1d3557';

@@ -291,6 +291,93 @@ kbd {
   display: none;
 }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+
+.tab {
+  flex: 1;
+  font: inherit;
+  font-weight: bold;
+  font-size: 18px;
+  color: var(--ink);
+  background: #f1f7fb;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.tab.selected {
+  border-color: var(--accent);
+  background: #fff4ec;
+}
+
+.tab-page.hidden {
+  display: none;
+}
+
+.choices.missions {
+  margin-top: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.choices.missions .choice {
+  text-align: center;
+}
+
+.choice .stars {
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+#mission-done {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(135, 206, 235, 0.55);
+  padding: 16px;
+}
+
+#mission-done.hidden {
+  display: none;
+}
+
+#md-stars {
+  font-size: 56px;
+  letter-spacing: 6px;
+  margin: 6px 0;
+}
+
+.md-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.big-btn {
+  font: inherit;
+  font-weight: bold;
+  font-size: 18px;
+  color: var(--ink);
+  background: #f1f7fb;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 22px;
+  cursor: pointer;
+}
+
+#md-again {
+  color: #fff;
+  background: var(--accent);
+}
+
 #top-buttons {
   position: fixed;
   top: 16px;
