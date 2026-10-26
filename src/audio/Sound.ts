@@ -18,12 +18,15 @@ export class Sound {
   private engineFilter!: BiquadFilterNode;
   private engineGain!: GainNode;
   private propLfo!: OscillatorNode;
+  private propDepth!: GainNode;
+  private roarGain!: GainNode;
   private windFilter!: BiquadFilterNode;
   private windGain!: GainNode;
   private rumbleGain!: GainNode;
   private stallGain!: GainNode;
   private noise!: AudioBuffer;
 
+  private engine: 'prop' | 'jet' = 'prop';
   private muted = loadMuted();
   private paused = false;
   private hidden = false;
@@ -51,7 +54,8 @@ export class Sound {
     this.engineFilter.connect(chop);
     this.engineOsc = osc(ctx, 'sawtooth', 50, this.engineFilter);
     this.engineSub = osc(ctx, 'square', 25, gain(ctx, 0.5, this.engineFilter));
-    this.propLfo = osc(ctx, 'sine', 8, gain(ctx, 0.25, chop.gain));
+    this.propDepth = gain(ctx, this.engine === 'prop' ? 0.25 : 0, chop.gain);
+    this.propLfo = osc(ctx, 'sine', 8, this.propDepth);
 
     // Wind and runway rumble share one looping white-noise source.
     this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
@@ -67,6 +71,14 @@ export class Sound {
     this.windFilter.Q.value = 0.7;
     this.windFilter.connect(this.windGain);
     source.connect(this.windFilter);
+
+    // Jet roar: the hiss of air rushing through the engines.
+    this.roarGain = gain(ctx, 0, this.master);
+    const roarFilter = ctx.createBiquadFilter();
+    roarFilter.type = 'highpass';
+    roarFilter.frequency.value = 900;
+    roarFilter.connect(this.roarGain);
+    source.connect(roarFilter);
 
     this.rumbleGain = gain(ctx, 0, this.master);
     const rumbleFilter = ctx.createBiquadFilter();
@@ -95,12 +107,16 @@ export class Sound {
     const throttle = model.throttle;
     const speed = MathUtils.clamp(model.speed / model.spec.maxSpeed, 0, 1);
 
-    const pitch = 40 + throttle * 50 + speed * 20;
+    const jet = this.engine === 'jet';
+    // A propeller drones low and chops; a jet whines higher and roars.
+    const pitch = jet ? 110 + throttle * 220 + speed * 60 : 40 + throttle * 50 + speed * 20;
     this.engineOsc.frequency.setTargetAtTime(pitch, t, SMOOTH);
     this.engineSub.frequency.setTargetAtTime(pitch / 2, t, SMOOTH);
-    this.engineFilter.frequency.setTargetAtTime(300 + throttle * 1500, t, SMOOTH);
-    this.engineGain.gain.setTargetAtTime(running ? 0.05 + throttle * 0.12 : 0, t, SMOOTH);
+    this.engineFilter.frequency.setTargetAtTime(jet ? 600 + throttle * 2500 : 300 + throttle * 1500, t, SMOOTH);
+    const engineVolume = jet ? 0.03 + throttle * 0.06 : 0.05 + throttle * 0.12;
+    this.engineGain.gain.setTargetAtTime(running ? engineVolume : 0, t, SMOOTH);
     this.propLfo.frequency.setTargetAtTime(8 + throttle * 20, t, SMOOTH);
+    this.roarGain.gain.setTargetAtTime(running && jet ? 0.04 + throttle * 0.18 : 0, t, SMOOTH);
 
     this.windFilter.frequency.setTargetAtTime(300 + speed * 1500, t, SMOOTH);
     this.windGain.gain.setTargetAtTime(running ? speed * speed * 0.25 : 0, t, SMOOTH);
@@ -122,6 +138,26 @@ export class Sound {
     this.chime([783.99, 523.25]);
   }
 
+  /** Switches between a propeller drone and a jet whine (when the player picks another plane). */
+  setEngine(engine: 'prop' | 'jet'): void {
+    this.engine = engine;
+    if (this.ctx) this.propDepth.gain.setTargetAtTime(engine === 'prop' ? 0.25 : 0, this.ctx.currentTime, 0.05);
+  }
+
+  /** "Bloop" plus a wash of spray for landing in the sea with a plane that can't. */
+  splash(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const bloopGain = gain(ctx, 0, this.master);
+    bloopGain.gain.setValueAtTime(0.25, t);
+    bloopGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    const bloop = osc(ctx, 'sine', 600, bloopGain, t);
+    bloop.frequency.exponentialRampToValueAtTime(180, t + 0.3);
+    bloop.stop(t + 0.3);
+    this.noiseBurst('bandpass', 1000, 0.45, 1.1);
+  }
+
   /** A soft, cartoonish "bump" rather than anything scary. */
   crash(): void {
     const ctx = this.ctx;
@@ -134,19 +170,24 @@ export class Sound {
     const thump = osc(ctx, 'sine', 140, thumpGain, t);
     thump.frequency.exponentialRampToValueAtTime(40, t + 0.5);
     thump.stop(t + 0.6);
+    this.noiseBurst('lowpass', 500, 0.35, 0.7);
+  }
 
-    const puffGain = gain(ctx, 0, this.master);
-    puffGain.gain.setValueAtTime(0.35, t);
-    puffGain.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
-    const puffFilter = ctx.createBiquadFilter();
-    puffFilter.type = 'lowpass';
-    puffFilter.frequency.value = 500;
-    puffFilter.connect(puffGain);
-    const puff = ctx.createBufferSource();
-    puff.buffer = this.noise;
-    puff.connect(puffFilter);
-    puff.start(t);
-    puff.stop(t + 0.7);
+  private noiseBurst(type: BiquadFilterType, frequency: number, volume: number, seconds: number): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const env = gain(ctx, 0, this.master);
+    env.gain.setValueAtTime(volume, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + seconds);
+    const filter = ctx.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = frequency;
+    filter.connect(env);
+    const burst = ctx.createBufferSource();
+    burst.buffer = this.noise;
+    burst.connect(filter);
+    burst.start(t);
+    burst.stop(t + seconds);
   }
 
   /** Flips mute on/off, remembers it for next time and returns the new state. */

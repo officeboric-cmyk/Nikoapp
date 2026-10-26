@@ -1,5 +1,6 @@
 import {
   BoxGeometry,
+  CanvasTexture,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -8,34 +9,37 @@ import {
   HemisphereLight,
   IcosahedronGeometry,
   InstancedMesh,
-  Material,
+  MathUtils,
   Matrix4,
   Mesh,
   MeshStandardMaterial,
-  PlaneGeometry,
   Quaternion,
   Scene,
+  Sprite,
+  SpriteMaterial,
   Vector3,
 } from 'three';
+import { MAP_HALF_SIZE, type IslandDef } from './islands';
+import { mulberry32, noise2 } from './noise';
+import { Terrain } from './Terrain';
 
-/**
- * Phase 1 world: a big flat meadow with a runway, trees, a few villages and clouds,
- * mostly so the player can feel speed and height. Proper terrain comes in phase 2.
- */
+/** Sky, light, the islands with their trees and villages, clouds and island name labels. */
 
 export const SKY_COLOR = 0x87ceeb;
-export const WORLD_SIZE = 30000; // m, edge length of the ground plane
-export const RUNWAY = { width: 30, length: 800, startZ: 50 }; // runs from startZ towards -Z
-
-const SHADOW_RANGE = 60; // m around the plane covered by the sun's shadow map
+const SHADOW_RANGE = 80; // m around the plane covered by the sun's shadow map
+const TREE_COUNT = 6000;
+const LABEL_HIDE_NEAR = 700; // m, labels fade out when you get this close
+const LABEL_SHOW_FAR = 1600; // m, fully visible from here on
 
 export class World {
+  readonly terrain = new Terrain();
   private readonly sun: DirectionalLight;
   private readonly sunOffset = new Vector3(80, 150, 60);
+  private readonly labels: Sprite[] = [];
 
   constructor(private readonly scene: Scene) {
     scene.background = new Color(SKY_COLOR);
-    scene.fog = new Fog(SKY_COLOR, 600, 5000);
+    scene.fog = new Fog(SKY_COLOR, 2500, 12000);
 
     scene.add(new HemisphereLight(0xdff6ff, 0x5a8f3c, 1.4));
     this.sun = new DirectionalLight(0xffffff, 2.2);
@@ -48,170 +52,160 @@ export class World {
     cam.far = 600;
     scene.add(this.sun, this.sun.target);
 
+    scene.add(this.terrain.object);
     const rand = mulberry32(42);
-    this.addGround(rand);
-    this.addRunway();
     this.addTrees(rand);
-    this.addVillages(rand);
+    this.addHouses(rand);
+    this.addLighthouses();
     this.addClouds(rand);
+    this.addLabels();
   }
 
-  /** Keeps the shadow-casting sun centred on the plane. */
+  /** Keeps the shadow-casting sun centred on the plane and fades labels that are too close. */
   update(focus: Vector3): void {
     this.sun.target.position.copy(focus);
     this.sun.position.copy(focus).add(this.sunOffset);
+    for (const label of this.labels) {
+      const distance = label.position.distanceTo(focus);
+      label.material.opacity = MathUtils.smoothstep(distance, LABEL_HIDE_NEAR, LABEL_SHOW_FAR);
+      label.visible = label.material.opacity > 0;
+    }
   }
 
-  private addGround(rand: () => number): void {
-    const ground = new Mesh(
-      new PlaneGeometry(WORLD_SIZE, WORLD_SIZE).rotateX(-Math.PI / 2),
-      new MeshStandardMaterial({ color: 0x7cc35a, roughness: 1 }),
-    );
-    ground.receiveShadow = true;
-    groundLayer(ground, -3);
-    this.scene.add(ground);
-
-    // Patchwork fields make it much easier to see how fast you are moving.
-    const fieldColors = [0x9bd770, 0x6aab45, 0xe9d985, 0xb5e48c, 0x8fbf5a];
-    const fields = new InstancedMesh(
-      new PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-      new MeshStandardMaterial({ roughness: 1 }),
-      600,
-    );
-    const m = new Matrix4();
-    const color = new Color();
-    for (let i = 0; i < fields.count; i++) {
-      let x: number, z: number;
-      do {
-        x = (rand() - 0.5) * 12000;
-        z = (rand() - 0.5) * 12000;
-      } while (nearRunway(x, z, 120));
-      const w = 80 + rand() * 300;
-      const d = 80 + rand() * 300;
-      m.compose(new Vector3(x, 0, z), yRotation(rand() * Math.PI), new Vector3(w, 1, d));
-      fields.setMatrixAt(i, m);
-      fields.setColorAt(i, color.setHex(fieldColors[i % fieldColors.length]));
-    }
-    fields.receiveShadow = true;
-    groundLayer(fields, -2);
-    this.scene.add(fields);
+  private slopeAt(x: number, z: number): number {
+    const t = this.terrain;
+    return Math.hypot(t.heightAt(x + 5, z) - t.heightAt(x - 5, z), t.heightAt(x, z + 5) - t.heightAt(x, z - 5)) / 10;
   }
 
-  private addRunway(): void {
-    const { width, length, startZ } = RUNWAY;
-    const centerZ = startZ - length / 2;
-    const runway = new Mesh(new BoxGeometry(width, 0.04, length), new MeshStandardMaterial({ color: 0x4a4e57, roughness: 0.9 }));
-    runway.position.set(0, 0.02, centerZ);
-    runway.receiveShadow = true;
-    groundLayer(runway, -1);
-    this.scene.add(runway);
+  private nearAirport(x: number, z: number): boolean {
+    return this.terrain.airports.some((a) => a.flattenWeight(x, z) > 0.05);
+  }
 
-    const white = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
-    const dashCount = Math.floor(length / 40);
-    const dashes = new InstancedMesh(new BoxGeometry(1, 0.02, 20), white, dashCount + 16);
-    const m = new Matrix4();
-    for (let i = 0; i < dashCount; i++) {
-      dashes.setMatrixAt(i, m.makeTranslation(0, 0.05, startZ - 30 - i * 40));
-    }
-    // Threshold "piano keys" at both ends.
-    for (let i = 0; i < 8; i++) {
-      const x = -width / 2 + 3 + i * ((width - 6) / 7);
-      dashes.setMatrixAt(dashCount + i, m.makeTranslation(x, 0.05, startZ - 15));
-      dashes.setMatrixAt(dashCount + 8 + i, m.makeTranslation(x, 0.05, startZ - length + 15));
-    }
-    dashes.receiveShadow = true;
-    this.scene.add(dashes);
-
-    // A small tower and hangar next to the runway.
-    const tower = new Mesh(new CylinderGeometry(2, 2.5, 14, 8), new MeshStandardMaterial({ color: 0xf1faee, flatShading: true }));
-    tower.position.set(45, 7, startZ - 120);
-    const cab = new Mesh(new CylinderGeometry(3.5, 3, 3.5, 8), new MeshStandardMaterial({ color: 0x8ecae6, flatShading: true }));
-    cab.position.set(45, 15.5, startZ - 120);
-    const hangar = new Mesh(
-      new CylinderGeometry(12, 12, 30, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2),
-      new MeshStandardMaterial({ color: 0xe76f51, flatShading: true }),
-    );
-    hangar.position.set(50, 0, startZ - 220);
-    for (const mesh of [tower, cab, hangar]) {
-      mesh.castShadow = mesh.receiveShadow = true;
-      this.scene.add(mesh);
-    }
+  /** A random point somewhere over the given island (may be in the sea). */
+  private pointOn(island: IslandDef, rand: () => number, spread = 1.25): [number, number] {
+    const [along, across] = island.stretch ?? [1, 1];
+    const r = island.radius * spread * Math.max(along, across);
+    return [island.x + (rand() * 2 - 1) * r, island.z + (rand() * 2 - 1) * r];
   }
 
   private addTrees(rand: () => number): void {
-    const count = 2500;
+    const islands = this.terrain.islandDefs();
+    const weights = islands.map((i) => i.radius * i.radius * (i.stretch ? i.stretch[0] * i.stretch[1] : 1));
+    const total = weights.reduce((a, b) => a + b, 0);
+
     const trunks = new InstancedMesh(
       new CylinderGeometry(0.4, 0.6, 3, 6).translate(0, 1.5, 0),
       new MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true }),
-      count,
+      TREE_COUNT,
     );
     const crowns = new InstancedMesh(
       new ConeGeometry(3, 8, 7).translate(0, 7, 0),
       new MeshStandardMaterial({ color: 0x2d6a4f, flatShading: true }),
-      count,
+      TREE_COUNT,
     );
     const m = new Matrix4();
     const color = new Color();
-    for (let i = 0; i < count; i++) {
-      let x: number, z: number;
-      do {
-        // Clustered into little woods around random centres.
-        const cx = (rand() - 0.5) * 10000;
-        const cz = (rand() - 0.5) * 10000;
-        x = cx + (rand() - 0.5) * 300;
-        z = cz + (rand() - 0.5) * 300;
-      } while (nearRunway(x, z, 150));
+    let placed = 0;
+    for (let attempt = 0; attempt < TREE_COUNT * 20 && placed < TREE_COUNT; attempt++) {
+      // Pick an island in proportion to its size, then a spot on it.
+      let pick = rand() * total;
+      let island = islands[0];
+      for (let k = 0; k < islands.length; k++) {
+        pick -= weights[k];
+        if (pick <= 0) {
+          island = islands[k];
+          break;
+        }
+      }
+      const [x, z] = this.pointOn(island, rand);
+      const h = this.terrain.heightAt(x, z);
+      const woods = noise2(x / 400, z / 400, 99); // trees grow in patches
+      if (h < 3 || h > 330 || woods < -0.15 || this.slopeAt(x, z) > 0.5 || this.nearAirport(x, z)) continue;
       const s = 0.7 + rand() * 0.8;
-      m.compose(new Vector3(x, 0, z), yRotation(rand() * Math.PI * 2), new Vector3(s, s, s));
-      trunks.setMatrixAt(i, m);
-      crowns.setMatrixAt(i, m);
-      crowns.setColorAt(i, color.setHSL(0.3 + rand() * 0.08, 0.55, 0.25 + rand() * 0.12));
+      m.compose(new Vector3(x, h - 0.3, z), yRotation(rand() * Math.PI * 2), new Vector3(s, s, s));
+      trunks.setMatrixAt(placed, m);
+      crowns.setMatrixAt(placed, m);
+      crowns.setColorAt(placed, color.setHSL(0.3 + rand() * 0.08, 0.55, 0.25 + rand() * 0.12));
+      placed++;
     }
+    trunks.count = crowns.count = placed;
     this.scene.add(trunks, crowns);
   }
 
-  private addVillages(rand: () => number): void {
-    const perVillage = 25;
-    const centres = [
-      [900, -1200],
-      [-1500, -600],
-      [400, 1800],
-      [-800, -3000],
-      [2500, -400],
-    ];
-    const count = centres.length * perVillage;
+  private addHouses(rand: () => number): void {
+    const wallColors = [0xfff3b0, 0xf1faee, 0xffd6a5, 0xcaf0f8, 0xffadad];
+    const spots: { x: number; z: number; y: number; w: number; h: number; turn: number }[] = [];
+    for (const island of this.terrain.islandDefs()) {
+      const wanted = island.airport ? 18 : island.radius > 600 ? 8 : 3;
+      // One village per island, somewhere on the lower slopes.
+      let cx = island.x;
+      let cz = island.z;
+      for (let tries = 0; tries < 50; tries++) {
+        const [x, z] = this.pointOn(island, rand, 0.6);
+        const h = this.terrain.heightAt(x, z);
+        if (h > 4 && h < 120 && !this.nearAirport(x, z)) {
+          cx = x;
+          cz = z;
+          break;
+        }
+      }
+      let built = 0;
+      for (let tries = 0; tries < 200 && built < wanted; tries++) {
+        const x = cx + (rand() - 0.5) * 300;
+        const z = cz + (rand() - 0.5) * 300;
+        const y = this.terrain.heightAt(x, z);
+        if (y < 2.5 || y > 150 || this.slopeAt(x, z) > 0.3 || this.nearAirport(x, z)) continue;
+        spots.push({ x, z, y, w: 8 + rand() * 6, h: 6 + rand() * 5, turn: Math.floor(rand() * 4) * (Math.PI / 2) });
+        built++;
+      }
+    }
+
     const walls = new InstancedMesh(
       new BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
       new MeshStandardMaterial({ flatShading: true }),
-      count,
+      spots.length,
     );
     const roofs = new InstancedMesh(
       new ConeGeometry(0.75, 0.6, 4).rotateY(Math.PI / 4).translate(0, 1.3, 0),
       new MeshStandardMaterial({ color: 0xc0392b, flatShading: true }),
-      count,
+      spots.length,
     );
-    const wallColors = [0xfff3b0, 0xf1faee, 0xffd6a5, 0xcaf0f8, 0xffadad];
     const m = new Matrix4();
     const color = new Color();
-    let i = 0;
-    for (const [cx, cz] of centres) {
-      for (let h = 0; h < perVillage; h++, i++) {
-        const x = cx + (rand() - 0.5) * 250;
-        const z = cz + (rand() - 0.5) * 250;
-        const w = 8 + rand() * 6;
-        const height = 6 + rand() * 5;
-        m.compose(new Vector3(x, 0, z), yRotation(Math.floor(rand() * 4) * (Math.PI / 2)), new Vector3(w, height, w));
-        walls.setMatrixAt(i, m);
-        roofs.setMatrixAt(i, m);
-        walls.setColorAt(i, color.setHex(wallColors[i % wallColors.length]));
-      }
-    }
+    spots.forEach((s, i) => {
+      // Sunk a little so houses on gentle slopes don't float.
+      m.compose(new Vector3(s.x, s.y - 1, s.z), yRotation(s.turn), new Vector3(s.w, s.h, s.w));
+      walls.setMatrixAt(i, m);
+      roofs.setMatrixAt(i, m);
+      walls.setColorAt(i, color.setHex(wallColors[i % wallColors.length]));
+    });
     this.scene.add(walls, roofs);
+  }
+
+  private addLighthouses(): void {
+    const red = new MeshStandardMaterial({ color: 0xe63946, flatShading: true });
+    const white = new MeshStandardMaterial({ color: 0xf8f9fa, flatShading: true });
+    const lamp = new MeshStandardMaterial({ color: 0xffe066, emissive: 0xffd43b, emissiveIntensity: 1.5 });
+    for (const island of this.terrain.islandDefs().filter((i) => i.lighthouse)) {
+      const base = this.terrain.heightAt(island.x, island.z);
+      for (let i = 0; i < 6; i++) {
+        const r = 3.2 - i * 0.3;
+        const ring = new Mesh(new CylinderGeometry(r - 0.3, r, 5, 12), i % 2 ? white : red);
+        ring.position.set(island.x, base + 2.5 + i * 5, island.z);
+        ring.castShadow = true;
+        this.scene.add(ring);
+      }
+      const light = new Mesh(new CylinderGeometry(1.6, 1.6, 3, 10), lamp);
+      light.position.set(island.x, base + 31.5, island.z);
+      const cap = new Mesh(new ConeGeometry(2.2, 2.5, 10), red);
+      cap.position.set(island.x, base + 34.2, island.z);
+      this.scene.add(light, cap);
+    }
   }
 
   private addClouds(rand: () => number): void {
     const puffsPerCloud = 5;
-    const clouds = 120;
+    const clouds = 220;
     const puffs = new InstancedMesh(
       new IcosahedronGeometry(1, 1),
       new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 1, flatShading: true }),
@@ -221,9 +215,9 @@ export class World {
     const noRotation = new Quaternion();
     let i = 0;
     for (let c = 0; c < clouds; c++) {
-      const cx = (rand() - 0.5) * 12000;
-      const cy = 180 + rand() * 300;
-      const cz = (rand() - 0.5) * 12000;
+      const cx = (rand() * 2 - 1) * MAP_HALF_SIZE * 1.1;
+      const cy = 300 + rand() * 500;
+      const cz = (rand() * 2 - 1) * MAP_HALF_SIZE * 1.1;
       for (let p = 0; p < puffsPerCloud; p++, i++) {
         const r = 20 + rand() * 25;
         const pos = new Vector3(cx + (p - 2) * 25 + rand() * 10, cy + rand() * 12, cz + (rand() - 0.5) * 30);
@@ -233,35 +227,37 @@ export class World {
     }
     this.scene.add(puffs);
   }
+
+  /** Each island's name floats above it, so kids can find their way to it from afar. */
+  private addLabels(): void {
+    for (const island of this.terrain.islandDefs()) {
+      const text = island.airport ? `${island.name} ✈` : island.name;
+      const label = new Sprite(new SpriteMaterial({ map: labelTexture(text), transparent: true, depthWrite: false }));
+      label.position.set(island.x, island.peak + 150, island.z);
+      label.scale.set(560, 140, 1);
+      this.labels.push(label);
+      this.scene.add(label);
+    }
+  }
 }
 
-/**
- * Flat layers lying on the ground (grass, fields, runway) skip the depth buffer and are
- * drawn bottom-up in `order`, so they can never z-fight or hide one another. The huge
- * ground plane otherwise covered the runway on some GPUs.
- */
-function groundLayer(mesh: Mesh, order: number): void {
-  mesh.renderOrder = order;
-  (mesh.material as Material).depthWrite = false;
-}
-
-function nearRunway(x: number, z: number, margin: number): boolean {
-  const { width, length, startZ } = RUNWAY;
-  return Math.abs(x) < width / 2 + margin && z < startZ + margin && z > startZ - length - margin;
+function labelTexture(text: string): CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = 'bold 56px "Trebuchet MS", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = 'rgba(29, 53, 87, 0.85)';
+  ctx.strokeText(text, 256, 64);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, 256, 64);
+  return new CanvasTexture(canvas);
 }
 
 const yAxis = new Vector3(0, 1, 0);
 function yRotation(angle: number): Quaternion {
   return new Quaternion().setFromAxisAngle(yAxis, angle);
-}
-
-/** Small seeded RNG so the world looks the same every time. */
-function mulberry32(seed: number): () => number {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }

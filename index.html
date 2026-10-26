@@ -37,16 +37,27 @@
         <li><kbd>Q</kbd> / <kbd>E</kbd> kormilo</li>
         <li><kbd>Razmak</kbd> kočnica</li>
         <li><kbd>N</kbd> ispočetka &nbsp; <kbd>P</kbd> pauza</li>
-        <li><kbd>M</kbd> zvuk &nbsp; <kbd>H</kbd> pomoć</li>
+        <li><kbd>M</kbd> zvuk &nbsp; <kbd>H</kbd> pomoć &nbsp; <kbd>Esc</kbd> izbornik</li>
       </ul>
       <p class="hint">Daj gas, ubrzaj po pisti i povuci nos gore!</p>
     </div>
 
-    <div id="start">
-      <div class="start-card">
+    <div id="minimap-box">
+      <canvas id="minimap" width="180" height="180"></canvas>
+      <div id="minimap-info"></div>
+    </div>
+
+    <button id="menu-btn" type="button">☰ Izbornik</button>
+
+    <div id="menu">
+      <div class="menu-card">
         <h1>✈️ Niko Leti</h1>
-        <p>Poleti sa piste i istraži otok!</p>
-        <button id="start-btn">Kreni!</button>
+        <p>Leti između 12 otoka!</p>
+        <h2>1. Odaberi avion</h2>
+        <div id="menu-aircraft" class="choices"></div>
+        <h2>2. Odaberi aerodrom</h2>
+        <div id="menu-airports" class="choices airports"></div>
+        <button id="start-btn" type="button">Kreni!</button>
       </div>
     </div>
 

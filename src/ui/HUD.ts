@@ -21,9 +21,10 @@ export class HUD {
   private flashWarn = false;
   private flashUntil = 0;
 
-  update(model: FlightModel, now: number): void {
+  /** `altitude` is metres above whatever is below the plane (hill or sea). */
+  update(model: FlightModel, now: number, altitude: number): void {
     this.speed.textContent = String(Math.round(model.speed * 3.6));
-    this.alt.textContent = String(Math.max(0, Math.round(model.position.y - model.spec.gearHeight)));
+    this.alt.textContent = String(Math.max(0, Math.round(altitude)));
     this.throttle.style.width = `${Math.round(model.throttle * 100)}%`;
     if (now < this.flashUntil) this.show(this.flashText, this.flashWarn);
   }

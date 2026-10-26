@@ -20,27 +20,24 @@ export interface AircraftSpec {
   groundSteerRate: number; // rad/s, nose wheel on the runway
   turnRate: number; // rad/s heading change at a 90° bank
   gearHeight: number; // m from the plane's origin down to the wheels
+  floats: boolean; // a seaplane: can land on and take off from water
 }
 
-export const TRAINER: AircraftSpec = {
-  maxThrust: 6,
-  maxSpeed: 60,
-  stallSpeed: 20,
-  rotateSpeed: 24,
-  pitchRate: 0.9,
-  rollRate: 1.6,
-  yawRate: 0.4,
-  groundSteerRate: 0.8,
-  turnRate: 0.9,
-  gearHeight: 1.4,
-};
+/** What the plane can bump into: the ground height in metres, open water wherever it is below SEA_LEVEL. */
+export interface Ground {
+  heightAt(x: number, z: number): number;
+}
 
-export type FlightEvent = 'takeoff' | 'touchdown' | 'crash';
+export const SEA_LEVEL = 0;
+export const FLAT_GROUND: Ground = { heightAt: () => 0 };
+
+export type FlightEvent = 'takeoff' | 'touchdown' | 'crash' | 'splash';
 
 const GRAVITY_ALONG_PATH = 9.81 * 0.6; // softened: climbing slows you, diving speeds you up
 const MAX_SINK = 12; // m/s sink rate when fully stalled
 const THROTTLE_RATE = 0.5; // throttle change per second while a key is held
 const ROLLING_FRICTION = 0.5; // m/s²
+const WATER_FRICTION = 2; // m/s², floats drag more than wheels
 const BRAKE_DECEL = 6; // m/s²
 const AUTO_LEVEL_ROLL = 1.5;
 const AUTO_LEVEL_PITCH = 0.8;
@@ -50,6 +47,8 @@ const MAX_PITCH = MathUtils.degToRad(45); // no loops
 const CRASH_SINK = 7; // m/s vertical speed a touchdown can survive
 const CRASH_BANK = 0.5; // sin of the bank angle a touchdown can survive (~30°)
 const CRASH_NOSE_DOWN = -0.3; // sin of the pitch angle a touchdown can survive
+const CRASH_SLOPE = 0.35; // steepest hillside (rise over run) a touchdown can survive
+const LIFTOFF_CLIMB = 0.3; // m/s upward speed that counts as leaving the ground
 
 const FORWARD = new Vector3(0, 0, -1);
 const RIGHT = new Vector3(1, 0, 0);
@@ -70,12 +69,12 @@ export class FlightModel {
   stalled = false;
   crashed = false;
 
-  constructor(readonly spec: AircraftSpec = TRAINER) {}
+  constructor(readonly spec: AircraftSpec) {}
 
-  /** Puts the plane on the ground at `position`, nose pointing along `heading` (radians, 0 = -Z). */
+  /** Puts the plane down with its wheels at `position`, nose pointing along `heading` (radians, 0 = -Z). */
   reset(position: Vector3, heading: number): void {
     this.position.copy(position);
-    this.position.y = this.spec.gearHeight;
+    this.position.y += this.spec.gearHeight;
     this.quaternion.setFromEuler(tmpEuler.set(0, heading, 0));
     this.velocity.set(0, 0, 0);
     this.speed = 0;
@@ -86,7 +85,7 @@ export class FlightModel {
   }
 
   /** Advances the simulation by `dt` seconds and returns what happened during the step. */
-  step(dt: number, c: Controls): FlightEvent[] {
+  step(dt: number, c: Controls, ground: Ground = FLAT_GROUND): FlightEvent[] {
     const events: FlightEvent[] = [];
     if (this.crashed) return events;
     const s = this.spec;
@@ -102,7 +101,10 @@ export class FlightModel {
     // --- speed along the nose ---
     const drag = s.maxThrust / (s.maxSpeed * s.maxSpeed);
     let accel = this.throttle * s.maxThrust - drag * this.speed * this.speed - GRAVITY_ALONG_PATH * fwd.y;
-    if (this.onGround) accel -= ROLLING_FRICTION + (c.brake ? BRAKE_DECEL : 0);
+    if (this.onGround) {
+      const onWater = ground.heightAt(this.position.x, this.position.z) < SEA_LEVEL;
+      accel -= (onWater ? WATER_FRICTION : ROLLING_FRICTION) + (c.brake ? BRAKE_DECEL : 0);
+    }
     this.speed = Math.max(0, this.speed + accel * dt);
 
     // --- control inputs ---
@@ -148,27 +150,27 @@ export class FlightModel {
     this.position.addScaledVector(this.velocity, dt);
     this.stalled = !this.onGround && lift < 0.9;
 
-    // --- ground contact ---
-    const floor = s.gearHeight;
-    if (this.position.y <= floor) {
+    // --- ground and water contact ---
+    const terrain = ground.heightAt(this.position.x, this.position.z);
+    const onWater = terrain < SEA_LEVEL;
+    const floor = Math.max(terrain, SEA_LEVEL) + s.gearHeight;
+    const sinks = onWater && !s.floats;
+    if (this.position.y <= floor || (this.onGround && this.velocity.y < LIFTOFF_CLIMB)) {
+      // Below the surface, or rolling along it (also downhill): stay on it.
+      this.position.y = floor;
       if (!this.onGround) {
         const hardLanding = -this.velocity.y > CRASH_SINK;
         const wingFirst = Math.abs(right.y) > CRASH_BANK;
         const noseFirst = fwd.y < CRASH_NOSE_DOWN;
-        if (hardLanding || wingFirst || noseFirst) {
-          this.position.y = floor;
-          this.crashed = true;
-          this.speed = 0;
-          this.velocity.set(0, 0, 0);
-          events.push('crash');
-          return events;
-        }
+        const hillside = !onWater && slopeAt(ground, this.position.x, this.position.z) > CRASH_SLOPE;
+        if (sinks || hardLanding || wingFirst || noseFirst || hillside) return this.crash(events, sinks ? 'splash' : 'crash');
         this.onGround = true;
         this.stalled = false;
         events.push('touchdown');
+      } else if (sinks) {
+        return this.crash(events, 'splash'); // rolled off the runway into the sea
       }
-      this.position.y = floor;
-      // Wheels on the runway: wings level and the nose no lower than the horizon.
+      // Wheels on the ground: wings level and the nose no lower than the horizon.
       const heading = Math.atan2(-fwd.x, -fwd.z);
       const pitch = Math.max(0, Math.asin(MathUtils.clamp(fwd.y, -1, 1)));
       this.quaternion.setFromEuler(tmpEuler.set(pitch, heading, 0));
@@ -179,4 +181,20 @@ export class FlightModel {
 
     return events;
   }
+
+  private crash(events: FlightEvent[], kind: 'crash' | 'splash'): FlightEvent[] {
+    this.crashed = true;
+    this.speed = 0;
+    this.velocity.set(0, 0, 0);
+    events.push(kind);
+    return events;
+  }
+}
+
+/** Steepness of the ground (rise over run) around a point. */
+function slopeAt(ground: Ground, x: number, z: number): number {
+  const d = 3;
+  const dx = ground.heightAt(x + d, z) - ground.heightAt(x - d, z);
+  const dz = ground.heightAt(x, z + d) - ground.heightAt(x, z - d);
+  return Math.hypot(dx, dz) / (2 * d);
 }

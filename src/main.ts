@@ -1,18 +1,19 @@
-import { ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Scene, Timer, Vector3, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Scene, Timer, WebGLRenderer } from 'three';
 import { Aircraft } from './aircraft/Aircraft';
+import { AIRCRAFT } from './aircraft/catalog';
 import { Sound } from './audio/Sound';
 import { ChaseCamera } from './camera/ChaseCamera';
 import { Input } from './core/Input';
-import { FlightModel } from './physics/FlightModel';
+import { FlightModel, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
 import { HUD } from './ui/HUD';
-import { RUNWAY, World } from './world/World';
+import { Menu, type Choice } from './ui/Menu';
+import { Minimap } from './ui/Minimap';
+import { MAP_HALF_SIZE } from './world/islands';
+import { World } from './world/World';
 
 const PHYSICS_STEP = 1 / 120; // s, fixed so the flight feels the same at any frame rate
 const MAX_FRAME = 0.1; // s, ignore huge gaps (e.g. after switching tabs)
 const RESPAWN_DELAY = 2.5; // s after a crash
-const FAR_AWAY = 6000; // m from the airport before we suggest heading back
-
-const SPAWN = new Vector3(0, 0, RUNWAY.startZ - 25);
 
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -23,42 +24,81 @@ renderer.toneMapping = ACESFilmicToneMapping;
 document.getElementById('app')!.appendChild(renderer.domElement);
 
 const scene = new Scene();
-const camera = new PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 8000);
+const camera = new PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 15000);
 const world = new World(scene);
+const terrain = world.terrain;
 const input = new Input();
 const hud = new HUD();
-const model = new FlightModel();
-const aircraft = new Aircraft();
-const chase = new ChaseCamera(camera);
 const sound = new Sound();
-scene.add(aircraft.object);
+const minimap = new Minimap(terrain);
+const chase = new ChaseCamera(camera, terrain);
+const timer = new Timer();
 
+let choice: Choice;
+let model: FlightModel;
+let aircraft: Aircraft | undefined;
 let started = false;
 let paused = false;
 let hasFlown = false;
 let respawnAt = Infinity;
 let accumulator = 0;
-const timer = new Timer();
+
+const menu = new Menu(AIRCRAFT, terrain.airports, (picked) => {
+  // Runs inside the click / key press, so the browser lets the sound start.
+  sound.start();
+  setup(picked);
+  started = true;
+  setPaused(false);
+  hud.flash(`${picked.aircraft.name} je spreman! Drži R za gas 🚀`, timer.getElapsed(), 3);
+});
+
+/** Puts the chosen plane on the chosen airport's runway. */
+function setup(picked: Choice): void {
+  choice = picked;
+  if (aircraft?.type !== picked.aircraft) {
+    if (aircraft) scene.remove(aircraft.object);
+    aircraft = new Aircraft(picked.aircraft);
+    scene.add(aircraft.object);
+    model = new FlightModel(picked.aircraft.spec);
+    chase.distance = picked.aircraft.camera.distance;
+    chase.height = picked.aircraft.camera.height;
+    sound.setEngine(picked.aircraft.engine);
+  }
+  respawn();
+}
 
 function respawn(): void {
-  model.reset(SPAWN, 0);
-  aircraft.update(model, 0);
+  model.reset(choice.airport.spawnPoint(), choice.airport.heading);
+  aircraft!.update(model, 0);
   chase.snap(model);
   respawnAt = Infinity;
   accumulator = 0;
 }
-respawn();
 
-function start(): void {
-  if (started) return;
-  started = true;
-  sound.start(); // must happen inside the click / key press, or the browser keeps it silent
-  document.getElementById('start')!.classList.add('hidden');
-  hud.flash('Drži R za gas! 🚀', timer.getElapsed(), 3);
+function setPaused(value: boolean): void {
+  paused = value;
+  sound.setPaused(paused);
 }
-document.getElementById('start-btn')!.addEventListener('click', start);
+
+setup(menu.choice); // show the plane on its runway behind the menu
+
+document.getElementById('menu-btn')!.addEventListener('click', toggleMenu);
+function toggleMenu(): void {
+  // Drop focus so a later Space (brake) can't "click" a button again.
+  (document.activeElement as HTMLElement | null)?.blur();
+  if (!menu.visible) {
+    setPaused(true);
+    menu.show();
+  } else if (started) {
+    // Closing without changing anything carries on with the same flight.
+    menu.hide();
+    setPaused(false);
+  }
+}
+
 window.addEventListener('keydown', (e) => {
-  if (!started && (e.code === 'Enter' || e.code === 'Space')) start();
+  // Starting from a key press (not the frame loop) keeps it a user gesture, which the sound needs.
+  if (menu.visible && e.code === 'Enter') menu.start();
 });
 
 window.addEventListener('resize', () => {
@@ -67,7 +107,7 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-function handleEvents(events: string[], now: number): void {
+function handleEvents(events: FlightEvent[], now: number): void {
   for (const event of events) {
     if (event === 'takeoff') {
       if (!hasFlown) hud.hideHelp(); // out of the way once they've got it; H brings it back
@@ -75,18 +115,25 @@ function handleEvents(events: string[], now: number): void {
       hasFlown = true;
       sound.takeoff();
     } else if (event === 'touchdown') {
-      hud.flash('Sletio si! 👍', now);
+      const runway = terrain.runwayAt(model.position.x, model.position.z);
+      const onSea = terrain.heightAt(model.position.x, model.position.z) < SEA_LEVEL;
+      hud.flash(runway ? `Sletio si na ${runway.name}! 👍` : onSea ? 'Sletio si na more! 🌊' : 'Sletio si na travu! 👍', now);
       sound.touchdown();
     } else if (event === 'crash') {
       hud.flash('Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
       sound.crash();
+    } else if (event === 'splash') {
+      hud.flash('Pljus! 🌊 Ovaj avion ne zna plivati. Idemo opet…', now, RESPAWN_DELAY, true);
+      respawnAt = now + RESPAWN_DELAY;
+      sound.splash();
     }
   }
 }
 
 /** Gentle tips for whatever the player is doing right now. */
 function updateHint(now: number): void {
+  if (!started || menu.visible) return hud.hint(null, now);
   if (paused) return hud.hint('Pauza — pritisni P za nastavak', now);
   if (model.crashed) return hud.hint(null, now);
   if (model.stalled) return hud.hint('Presporo! Dodaj gas (R) i spusti nos', now, true);
@@ -95,8 +142,10 @@ function updateHint(now: number): void {
     if (model.speed >= model.spec.rotateSpeed) return hud.hint('Sad drži W ili ↑ i poleti!', now);
     return hud.hint(null, now);
   }
-  const distance = Math.hypot(model.position.x - SPAWN.x, model.position.z - SPAWN.z);
-  if (distance > FAR_AWAY) return hud.hint('Daleko si! Okreni se natrag prema pisti', now);
+  const { x, z } = model.position;
+  if (Math.abs(x) > MAP_HALF_SIZE || Math.abs(z) > MAP_HALF_SIZE) {
+    return hud.hint('Kraj karte! Okreni se natrag prema otocima', now);
+  }
   hud.hint(null, now);
 }
 
@@ -107,32 +156,33 @@ function frame(time: number): void {
   const now = timer.getElapsed();
 
   if (input.wasTapped('KeyH')) hud.toggleHelp();
-  if (started) {
-    if (input.wasTapped('KeyP')) {
-      paused = !paused;
-      sound.setPaused(paused);
-    }
-    if (input.wasTapped('KeyM')) hud.flash(sound.toggleMute() ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);
+  if (input.wasTapped('Escape')) toggleMenu();
+  const playing = started && !menu.visible;
+  if (playing) {
+    if (input.wasTapped('KeyP')) setPaused(!paused);
     if (input.wasTapped('KeyN')) respawn();
+    if (input.wasTapped('KeyM')) hud.flash(sound.toggleMute() ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);
   }
 
-  if (started && !paused) {
+  if (playing && !paused) {
     const controls = input.controls();
     accumulator += dt;
     while (accumulator >= PHYSICS_STEP) {
-      handleEvents(model.step(PHYSICS_STEP, controls), now);
+      handleEvents(model.step(PHYSICS_STEP, controls, terrain), now);
       accumulator -= PHYSICS_STEP;
     }
     if (now >= respawnAt) respawn();
-    aircraft.update(model, dt);
+    aircraft!.update(model, dt);
     chase.update(model, dt);
     sound.update(model);
   }
   input.endFrame();
 
+  const below = Math.max(terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
   world.update(model.position);
   updateHint(now);
-  hud.update(model, now);
+  hud.update(model, now, model.position.y - model.spec.gearHeight - below);
+  minimap.update(model);
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);

@@ -150,7 +150,7 @@ kbd {
   text-align: center;
 }
 
-#start {
+#menu {
   position: fixed;
   inset: 0;
   display: flex;
@@ -160,29 +160,132 @@ kbd {
   padding: 16px;
 }
 
-#start.hidden {
+#menu.hidden {
   display: none;
 }
 
-.start-card {
+.menu-card {
   background: #fff;
   border-radius: 28px;
-  padding: 32px 40px;
+  padding: 24px 28px;
+  width: min(720px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
   text-align: center;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
-.start-card h1 {
-  margin: 0 0 8px;
-  font-size: 44px;
+.menu-card h1 {
+  margin: 0 0 4px;
+  font-size: 40px;
 }
 
-.start-card p {
-  margin: 0 0 24px;
+.menu-card p {
+  margin: 0 0 8px;
   font-size: 18px;
 }
 
+.menu-card h2 {
+  margin: 18px 0 10px;
+  font-size: 18px;
+  text-align: left;
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.choices.airports {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.choice {
+  font: inherit;
+  color: var(--ink);
+  background: #f1f7fb;
+  border: 3px solid transparent;
+  border-radius: 16px;
+  padding: 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.choice:hover {
+  background: #e3f1fa;
+}
+
+.choice.selected {
+  border-color: var(--accent);
+  background: #fff4ec;
+}
+
+.choice .emoji {
+  font-size: 30px;
+}
+
+.choice small {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+#menu-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  font: inherit;
+  font-weight: bold;
+  color: var(--ink);
+  background: var(--panel);
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#minimap-box {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#minimap {
+  display: block;
+  width: 180px;
+  height: 180px;
+  border-radius: 10px;
+}
+
+#minimap-info {
+  margin-top: 6px;
+  max-width: 180px;
+  font-size: 13px;
+  font-weight: bold;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  #minimap {
+    width: 120px;
+    height: 120px;
+  }
+
+  #minimap-info {
+    max-width: 120px;
+  }
+}
+
 #start-btn {
+  margin-top: 22px;
   font: inherit;
   font-size: 24px;
   font-weight: bold;
