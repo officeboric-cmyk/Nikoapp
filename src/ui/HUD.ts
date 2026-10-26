@@ -1,0 +1,59 @@
+import type { FlightModel } from '../physics/FlightModel';
+
+function el<T extends HTMLElement = HTMLElement>(id: string): T {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`Missing #${id} in index.html`);
+  return node as T;
+}
+
+/**
+ * The on-screen gauges plus a single message bubble. A flash (event message) wins
+ * over a hint until it expires; hints are re-evaluated every frame by the game.
+ */
+export class HUD {
+  private readonly speed = el('hud-speed');
+  private readonly alt = el('hud-alt');
+  private readonly throttle = el('hud-throttle');
+  private readonly message = el('message');
+  private readonly help = el('help');
+
+  private flashText = '';
+  private flashWarn = false;
+  private flashUntil = 0;
+
+  update(model: FlightModel, now: number): void {
+    this.speed.textContent = String(Math.round(model.speed * 3.6));
+    this.alt.textContent = String(Math.max(0, Math.round(model.position.y - model.spec.gearHeight)));
+    this.throttle.style.width = `${Math.round(model.throttle * 100)}%`;
+    if (now < this.flashUntil) this.show(this.flashText, this.flashWarn);
+  }
+
+  /** Shows an event message for `seconds`, hiding any hint meanwhile. */
+  flash(text: string, now: number, seconds = 2.5, warn = false): void {
+    this.flashText = text;
+    this.flashWarn = warn;
+    this.flashUntil = now + seconds;
+    this.show(text, warn);
+  }
+
+  /** Shows a hint unless a flash is active. Pass null to clear. */
+  hint(text: string | null, now: number, warn = false): void {
+    if (now < this.flashUntil) return;
+    if (text) this.show(text, warn);
+    else this.message.classList.remove('visible');
+  }
+
+  toggleHelp(): void {
+    this.help.classList.toggle('hidden');
+  }
+
+  hideHelp(): void {
+    this.help.classList.add('hidden');
+  }
+
+  private show(text: string, warn: boolean): void {
+    if (this.message.textContent !== text) this.message.textContent = text;
+    this.message.classList.add('visible');
+    this.message.classList.toggle('warn', warn);
+  }
+}

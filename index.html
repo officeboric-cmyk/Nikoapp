@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="hr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Niko Leti</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="hud">
+      <div class="gauge">
+        <span class="label">Brzina</span>
+        <span class="value" id="hud-speed">0</span>
+        <span class="unit">km/h</span>
+      </div>
+      <div class="gauge">
+        <span class="label">Visina</span>
+        <span class="value" id="hud-alt">0</span>
+        <span class="unit">m</span>
+      </div>
+      <div class="gauge">
+        <span class="label">Gas</span>
+        <div class="bar"><div class="bar-fill" id="hud-throttle"></div></div>
+      </div>
+    </div>
+
+    <div id="message"></div>
+
+    <div id="help">
+      <h2>Kako letjeti</h2>
+      <ul>
+        <li><kbd>R</kbd> više gasa &nbsp; <kbd>F</kbd> manje gasa</li>
+        <li><kbd>W</kbd> / <kbd>↑</kbd> nos gore &nbsp; <kbd>S</kbd> / <kbd>↓</kbd> nos dolje</li>
+        <li><kbd>A</kbd> / <kbd>←</kbd> lijevo &nbsp; <kbd>D</kbd> / <kbd>→</kbd> desno</li>
+        <li><kbd>Q</kbd> / <kbd>E</kbd> kormilo</li>
+        <li><kbd>Razmak</kbd> kočnica</li>
+        <li><kbd>N</kbd> ispočetka &nbsp; <kbd>P</kbd> pauza &nbsp; <kbd>H</kbd> pomoć</li>
+      </ul>
+      <p class="hint">Daj gas, ubrzaj po pisti i povuci nos gore!</p>
+    </div>
+
+    <div id="start">
+      <div class="start-card">
+        <h1>✈️ Niko Leti</h1>
+        <p>Poleti sa piste i istraži otok!</p>
+        <button id="start-btn">Kreni!</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
