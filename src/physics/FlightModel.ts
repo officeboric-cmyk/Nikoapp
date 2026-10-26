@@ -69,6 +69,8 @@ export class FlightModel {
   onGround = true;
   stalled = false;
   crashed = false;
+  /** How the last touchdown went: sink rate (m/s) and sin of the bank angle (+ = right wing down). */
+  readonly lastTouchdown = { sink: 0, bank: 0 };
 
   constructor(readonly spec: AircraftSpec) {}
 
@@ -172,6 +174,8 @@ export class FlightModel {
         if (sinks || hardLanding || wingFirst || noseFirst || hillside) return this.crash(events, sinks ? 'splash' : 'crash');
         this.onGround = true;
         this.stalled = false;
+        this.lastTouchdown.sink = Math.max(0, -this.velocity.y);
+        this.lastTouchdown.bank = -right.y;
         events.push('touchdown');
       } else if (sinks) {
         return this.crash(events, 'splash'); // rolled off the runway into the sea

@@ -180,6 +180,15 @@ export class Terrain implements Ground {
     return this.islands.map((i) => i.def);
   }
 
+  /** The island whose dry land is under (x, z), if any. */
+  islandAt(x: number, z: number): IslandDef | undefined {
+    for (const island of this.islands) {
+      const h = island.heightAt(x, z);
+      if (h !== null && h > SEA_LEVEL) return island.def;
+    }
+    return undefined;
+  }
+
   /** The airport whose runway is under (x, z), if any. */
   runwayAt(x: number, z: number): Airport | undefined {
     return this.airports.find((a) => a.onRunway(x, z));

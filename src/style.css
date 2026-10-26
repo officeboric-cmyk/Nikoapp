@@ -79,6 +79,53 @@ body {
   transition: width 0.1s linear;
 }
 
+#hud-horizon {
+  display: block;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.gauge.instrument {
+  min-width: 0;
+  gap: 2px;
+}
+
+#target {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 6px 8px;
+  border-radius: 999px;
+  background: var(--panel);
+  font-weight: bold;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#target.hidden {
+  display: none;
+}
+
+#target-arrow {
+  width: 34px;
+  height: 34px;
+}
+
+#target-arrow circle {
+  fill: var(--accent);
+}
+
+#target-arrow path {
+  fill: #fff;
+}
+
 #message {
   position: fixed;
   top: 22%;
@@ -477,5 +524,23 @@ body.touch #help {
 
   #message {
     font-size: 20px;
+  }
+
+  #hud-horizon {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Too narrow for the target pill beside the gauges: move it to the bottom (on phones, under them). */
+@media (max-width: 1200px) {
+  #target {
+    top: auto;
+    bottom: 16px;
+  }
+
+  body.touch #target {
+    bottom: auto;
+    top: 76px;
   }
 }

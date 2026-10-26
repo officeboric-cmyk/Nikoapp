@@ -24,6 +24,15 @@
         <span class="label">Gas</span>
         <div class="bar"><div class="bar-fill" id="hud-throttle"></div></div>
       </div>
+      <div class="gauge instrument">
+        <canvas id="hud-horizon" width="56" height="56"></canvas>
+        <span class="unit" id="hud-heading">S 0°</span>
+      </div>
+    </div>
+
+    <div id="target" class="hidden">
+      <svg id="target-arrow" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" /><path d="M16 4 L26 16 L19.5 16 L19.5 27 L12.5 27 L12.5 16 L6 16 Z" /></svg>
+      <span id="target-text"></span>
     </div>
 
     <div id="message"></div>

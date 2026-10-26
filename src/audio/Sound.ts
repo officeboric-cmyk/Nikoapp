@@ -133,6 +133,11 @@ export class Sound {
     this.chime([523.25, 659.25, 783.99]);
   }
 
+  /** A sparkly run of high notes for discoveries and records. */
+  reward(): void {
+    this.chime([1046.5, 1318.5, 1568, 2093]);
+  }
+
   /** Two friendly notes coming down. */
   touchdown(): void {
     this.chime([783.99, 523.25]);

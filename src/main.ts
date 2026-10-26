@@ -4,17 +4,21 @@ import { AIRCRAFT } from './aircraft/catalog';
 import { Sound } from './audio/Sound';
 import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
 import { Input } from './core/Input';
+import { scoreLanding } from './game/landing';
+import { Progress } from './game/Progress';
 import { FlightModel, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
 import { HUD } from './ui/HUD';
+import { Instruments, type Target } from './ui/Instruments';
 import { Menu, type Choice } from './ui/Menu';
 import { Minimap } from './ui/Minimap';
 import { TouchControls } from './ui/TouchControls';
-import { MAP_HALF_SIZE } from './world/islands';
+import { ISLANDS, MAP_HALF_SIZE } from './world/islands';
 import { World } from './world/World';
 
 const PHYSICS_STEP = 1 / 120; // s, fixed so the flight feels the same at any frame rate
 const MAX_FRAME = 0.1; // s, ignore huge gaps (e.g. after switching tabs)
 const RESPAWN_DELAY = 2.5; // s after a crash
+const SHOW_AIRPORT_BEYOND = 1500; // m, the arrow points to the nearest airport once it is this far
 
 const touch = new TouchControls();
 const renderer = new WebGLRenderer({ antialias: true });
@@ -34,6 +38,8 @@ const input = new Input();
 const hud = new HUD();
 const sound = new Sound();
 const minimap = new Minimap(terrain);
+const instruments = new Instruments();
+const progress = new Progress();
 const rig = new CameraRig(camera, terrain);
 const timer = new Timer();
 
@@ -90,6 +96,7 @@ function setup(picked: Choice): void {
 
 function respawn(): void {
   model.reset(choice.airport.spawnPoint(), choice.airport.heading);
+  progress.discover(choice.airport.name); // the island you start on doesn't need discovering
   aircraft!.update(model, 0);
   rig.snap(model);
   touch.reset();
@@ -152,10 +159,11 @@ function handleEvents(events: FlightEvent[], now: number): void {
       hasFlown = true;
       sound.takeoff();
     } else if (event === 'touchdown') {
-      const runway = terrain.runwayAt(model.position.x, model.position.z);
-      const onSea = terrain.heightAt(model.position.x, model.position.z) < SEA_LEVEL;
-      hud.flash(runway ? `Sletio si na ${runway.name}! 👍` : onSea ? 'Sletio si na more! 🌊' : 'Sletio si na travu! 👍', now);
-      sound.touchdown();
+      const landing = scoreLanding(model, terrain);
+      const record = landing.airport && progress.recordLanding(landing.airport.name, landing.stars);
+      hud.flash(record ? `${landing.text} Novi rekord!` : landing.text, now, 3.5);
+      if (record) sound.reward();
+      else sound.touchdown();
     } else if (event === 'crash') {
       hud.flash('Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
@@ -166,6 +174,23 @@ function handleEvents(events: FlightEvent[], now: number): void {
       sound.splash();
     }
   }
+}
+
+/** Flying over an island for the first time "discovers" it, like collecting a sticker. */
+function checkDiscovery(now: number): void {
+  if (model.onGround || model.crashed) return;
+  const island = terrain.islandAt(model.position.x, model.position.z);
+  if (island && progress.discover(island.name)) {
+    hud.flash(`🏝️ Otkrio si: ${island.name}! (${progress.discovered.length}/${ISLANDS.length})`, now, 3.5);
+    sound.reward();
+  }
+}
+
+/** Where the arrow at the top points: the nearest airport, once it is far enough away to need finding. */
+function currentTarget(): Target | null {
+  const { airport, distance } = terrain.nearestAirport(model.position.x, model.position.z);
+  if (distance < SHOW_AIRPORT_BEYOND) return null;
+  return { name: `✈ ${airport.name}`, x: airport.center.x, z: airport.center.z };
 }
 
 /** Gentle tips for whatever the player is doing right now. */
@@ -210,6 +235,7 @@ function frame(time: number): void {
       accumulator -= PHYSICS_STEP;
     }
     if (now >= respawnAt) respawn();
+    checkDiscovery(now);
     aircraft!.update(model, dt);
     rig.update(model, dt);
     sound.update(model);
@@ -221,6 +247,7 @@ function frame(time: number): void {
   updateHint(now);
   hud.update(model, now, model.position.y - model.spec.gearHeight - below);
   minimap.update(model);
+  instruments.update(model, started ? currentTarget() : null);
   touch.update(model.throttle);
   renderer.render(scene, camera);
 }
