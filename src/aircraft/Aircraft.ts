@@ -1,12 +1,16 @@
 import type { FlightModel } from '../physics/FlightModel';
+import type { Airline } from './airlines';
 import type { AircraftModel, AircraftType } from './catalog';
 
 /** The visible plane: follows the flight model and spins its propellers with the throttle. */
 export class Aircraft {
   private readonly model: AircraftModel;
 
-  constructor(readonly type: AircraftType) {
-    this.model = type.build();
+  constructor(
+    readonly type: AircraftType,
+    readonly airline?: Airline,
+  ) {
+    this.model = type.build(airline);
   }
 
   get object() {

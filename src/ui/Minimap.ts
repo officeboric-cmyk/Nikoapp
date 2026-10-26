@@ -49,9 +49,21 @@ export class Minimap {
     }
   }
 
-  update(model: FlightModel): void {
+  /** `others` are the other planes in the sky, drawn as small white dots. */
+  update(model: FlightModel, others: Vector3[] = []): void {
     const ctx = this.ctx;
     ctx.drawImage(this.background, 0, 0);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1d3557';
+    ctx.lineWidth = 1;
+    for (const other of others) {
+      const [x, y] = this.toMap(other.x, other.z);
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
 
     // The plane as an arrow pointing where it flies (north is up).
     forward.set(0, 0, -1).applyQuaternion(model.quaternion);

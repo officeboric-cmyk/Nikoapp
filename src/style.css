@@ -280,6 +280,17 @@ kbd {
   opacity: 0.75;
 }
 
+.choice .swatch {
+  display: inline-block;
+  width: 28px;
+  height: 10px;
+  border-radius: 5px;
+}
+
+#menu-airline-box.hidden {
+  display: none;
+}
+
 #top-buttons {
   position: fixed;
   top: 16px;

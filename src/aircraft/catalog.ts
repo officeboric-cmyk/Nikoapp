@@ -18,6 +18,7 @@ import {
   SphereGeometry,
 } from 'three';
 import type { AircraftSpec } from '../physics/FlightModel';
+import { AIRLINES, type Airline } from './airlines';
 
 /**
  * Every plane the player can pick. Models are built from primitives (nose to -Z,
@@ -38,7 +39,8 @@ export interface AircraftType {
   engine: 'prop' | 'jet';
   // cockpit = pilot's eye, placed so the nose fills only the bottom of the FPV view
   camera: { distance: number; height: number; cockpit: [number, number, number] };
-  build(): AircraftModel;
+  liveries?: boolean; // wears an airline's colours (see airlines.ts)
+  build(airline?: Airline): AircraftModel;
 }
 
 export const AIRCRAFT: AircraftType[] = [
@@ -112,8 +114,9 @@ export const AIRCRAFT: AircraftType[] = [
     id: 'airliner',
     name: 'Putnički avion',
     emoji: '✈️',
-    description: 'Velik i spor. Vozi putnike Niko Aira!',
+    description: 'Velik i spor. Vozi putnike!',
     engine: 'jet',
+    liveries: true,
     camera: { distance: 40, height: 11, cockpit: [0, 1.8, -12.6] },
     spec: {
       maxThrust: 5,
@@ -260,11 +263,11 @@ function buildSeaplane(): AircraftModel {
   return p;
 }
 
-function buildAirliner(): AircraftModel {
+function buildAirliner(airline: Airline = AIRLINES[0]): AircraftModel {
   const p = new Parts();
   const white = mat(0xf8f9fa);
-  const blue = mat(0x1d3557);
-  const orange = mat(0xff8c42);
+  const tail = mat(airline.tail);
+  const stripe = mat(airline.stripe);
   const grey = mat(0xadb5bd);
   const dark = mat(0x343a40);
 
@@ -272,7 +275,7 @@ function buildAirliner(): AircraftModel {
   p.add(new SphereGeometry(1.7, 14, 10).scale(1, 1, 1.6), white, 0, 0, -12);
   p.add(new ConeGeometry(1.7, 5, 14).rotateX(Math.PI / 2), white, 0, 0.3, 14.5);
   p.add(new BoxGeometry(3.45, 0.35, 19), dark, 0, 0.55, -1); // windows
-  p.add(new BoxGeometry(3.44, 0.25, 21), orange, 0, -0.25, -0.5); // cheat line
+  p.add(new BoxGeometry(3.44, 0.25, 21), stripe, 0, -0.25, -0.5); // cheat line
   p.add(new SphereGeometry(1.2, 10, 6).scale(1, 0.5, 1), dark, 0, 0.75, -13.6); // cockpit windows
 
   for (const side of [-1, 1]) {
@@ -283,11 +286,11 @@ function buildAirliner(): AircraftModel {
   }
   p.wheel(0.6, 0, -2.6, -9, 1.5, dark);
 
-  p.add(new BoxGeometry(0.4, 6, 4), blue, 0, 4.2, 12.5).rotation.x = 0.35;
+  p.add(new BoxGeometry(0.4, 6, 4), tail, 0, 4.2, 12.5).rotation.x = 0.35;
   p.add(new BoxGeometry(10, 0.3, 2.5), white, 0, 0.8, 13);
 
-  // "NIKO AIR" on both sides of the fuselage, reading tail-to-nose on the right side.
-  const logo = new MeshBasicMaterial({ map: textTexture('NIKO AIR', '#1d3557'), transparent: true, side: DoubleSide });
+  // The airline's name on both sides of the fuselage, reading tail-to-nose on the right side.
+  const logo = new MeshBasicMaterial({ map: textTexture(airline.name.toUpperCase(), airline.text), transparent: true, side: DoubleSide });
   for (const side of [-1, 1]) {
     const label = p.add(new PlaneGeometry(8, 1.3).rotateY((side * Math.PI) / 2), logo, side * 1.73, 1.25, -2);
     label.castShadow = false;

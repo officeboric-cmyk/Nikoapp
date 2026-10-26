@@ -13,6 +13,7 @@ import { Menu, type Choice } from './ui/Menu';
 import { Minimap } from './ui/Minimap';
 import { TouchControls } from './ui/TouchControls';
 import { ISLANDS, MAP_HALF_SIZE } from './world/islands';
+import { Traffic } from './world/Traffic';
 import { World } from './world/World';
 
 const PHYSICS_STEP = 1 / 120; // s, fixed so the flight feels the same at any frame rate
@@ -34,6 +35,7 @@ const scene = new Scene();
 const camera = new PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 15000);
 const world = new World(scene, touch.enabled ? 1024 : 2048);
 const terrain = world.terrain;
+const traffic = new Traffic(scene, terrain);
 const input = new Input();
 const hud = new HUD();
 const sound = new Sound();
@@ -58,7 +60,8 @@ const menu = new Menu(AIRCRAFT, terrain.airports, (picked) => {
   setup(picked);
   started = true;
   setPaused(false);
-  hud.flash(`${picked.aircraft.name} je spreman! ${say('Drži R za gas', 'Povuci GAS gore')} 🚀`, timer.getElapsed(), 3);
+  const who = picked.aircraft.liveries ? `${picked.aircraft.name} ${picked.airline.name}` : picked.aircraft.name;
+  hud.flash(`${who} je spreman! ${say('Drži R za gas', 'Povuci GAS gore')} 🚀`, timer.getElapsed(), 3);
   if (touch.enabled) goFullscreen();
 });
 
@@ -81,9 +84,10 @@ function goFullscreen(): void {
 /** Puts the chosen plane on the chosen airport's runway. */
 function setup(picked: Choice): void {
   choice = picked;
-  if (aircraft?.type !== picked.aircraft) {
+  const airline = picked.aircraft.liveries ? picked.airline : undefined;
+  if (aircraft?.type !== picked.aircraft || aircraft.airline !== airline) {
     if (aircraft) scene.remove(aircraft.object);
-    aircraft = new Aircraft(picked.aircraft);
+    aircraft = new Aircraft(picked.aircraft, airline);
     scene.add(aircraft.object);
     model = new FlightModel(picked.aircraft.spec);
     rig.distance = picked.aircraft.camera.distance;
@@ -241,12 +245,13 @@ function frame(time: number): void {
     sound.update(model);
   }
   input.endFrame();
+  if (!paused) traffic.update(dt);
 
   const below = Math.max(terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
   world.update(model.position);
   updateHint(now);
   hud.update(model, now, model.position.y - model.spec.gearHeight - below);
-  minimap.update(model);
+  minimap.update(model, traffic.positions);
   instruments.update(model, started ? currentTarget() : null);
   touch.update(model.throttle);
   renderer.render(scene, camera);
