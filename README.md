@@ -2,7 +2,13 @@
 
 Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScript + Vite).
 
-## Pokretanje
+## Igraj online
+
+https://officeboric-cmyk.github.io/Nikoapp/
+
+Svaka promjena na grani `main` automatski se objavi (GitHub Actions → GitHub Pages).
+
+## Pokretanje na svom računalu
 
 ```bash
 npm install
