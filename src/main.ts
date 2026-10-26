@@ -2,12 +2,13 @@ import { ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Scene, Timer, W
 import { Aircraft } from './aircraft/Aircraft';
 import { AIRCRAFT } from './aircraft/catalog';
 import { Sound } from './audio/Sound';
-import { ChaseCamera } from './camera/ChaseCamera';
+import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
 import { Input } from './core/Input';
 import { FlightModel, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
 import { HUD } from './ui/HUD';
 import { Menu, type Choice } from './ui/Menu';
 import { Minimap } from './ui/Minimap';
+import { TouchControls } from './ui/TouchControls';
 import { MAP_HALF_SIZE } from './world/islands';
 import { World } from './world/World';
 
@@ -15,8 +16,10 @@ const PHYSICS_STEP = 1 / 120; // s, fixed so the flight feels the same at any fr
 const MAX_FRAME = 0.1; // s, ignore huge gaps (e.g. after switching tabs)
 const RESPAWN_DELAY = 2.5; // s after a crash
 
+const touch = new TouchControls();
 const renderer = new WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Phones and tablets get a slightly lighter picture so the game stays smooth.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, touch.enabled ? 1.5 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = PCFShadowMap;
@@ -25,13 +28,13 @@ document.getElementById('app')!.appendChild(renderer.domElement);
 
 const scene = new Scene();
 const camera = new PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 15000);
-const world = new World(scene);
+const world = new World(scene, touch.enabled ? 1024 : 2048);
 const terrain = world.terrain;
 const input = new Input();
 const hud = new HUD();
 const sound = new Sound();
 const minimap = new Minimap(terrain);
-const chase = new ChaseCamera(camera, terrain);
+const rig = new CameraRig(camera, terrain);
 const timer = new Timer();
 
 let choice: Choice;
@@ -49,8 +52,25 @@ const menu = new Menu(AIRCRAFT, terrain.airports, (picked) => {
   setup(picked);
   started = true;
   setPaused(false);
-  hud.flash(`${picked.aircraft.name} je spreman! Drži R za gas 🚀`, timer.getElapsed(), 3);
+  hud.flash(`${picked.aircraft.name} je spreman! ${say('Drži R za gas', 'Povuci GAS gore')} 🚀`, timer.getElapsed(), 3);
+  if (touch.enabled) goFullscreen();
 });
+
+/** Picks the keyboard or the touch wording for a tip. */
+function say(keys: string, fingers: string): string {
+  return touch.enabled ? fingers : keys;
+}
+
+/** On phones: use the whole screen, sideways (works on Android; iPhones ignore it). */
+function goFullscreen(): void {
+  const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+  document.documentElement
+    .requestFullscreen?.()
+    .then(() => orientation.lock?.('landscape'))
+    .catch(() => {
+      // Not allowed or not supported: the game still works in the normal page.
+    });
+}
 
 /** Puts the chosen plane on the chosen airport's runway. */
 function setup(picked: Choice): void {
@@ -60,8 +80,9 @@ function setup(picked: Choice): void {
     aircraft = new Aircraft(picked.aircraft);
     scene.add(aircraft.object);
     model = new FlightModel(picked.aircraft.spec);
-    chase.distance = picked.aircraft.camera.distance;
-    chase.height = picked.aircraft.camera.height;
+    rig.distance = picked.aircraft.camera.distance;
+    rig.height = picked.aircraft.camera.height;
+    rig.cockpit.fromArray(picked.aircraft.camera.cockpit);
     sound.setEngine(picked.aircraft.engine);
   }
   respawn();
@@ -70,7 +91,8 @@ function setup(picked: Choice): void {
 function respawn(): void {
   model.reset(choice.airport.spawnPoint(), choice.airport.heading);
   aircraft!.update(model, 0);
-  chase.snap(model);
+  rig.snap(model);
+  touch.reset();
   respawnAt = Infinity;
   accumulator = 0;
 }
@@ -83,9 +105,24 @@ function setPaused(value: boolean): void {
 setup(menu.choice); // show the plane on its runway behind the menu
 
 document.getElementById('menu-btn')!.addEventListener('click', toggleMenu);
-function toggleMenu(): void {
-  // Drop focus so a later Space (brake) can't "click" a button again.
+document.getElementById('cam-btn')!.addEventListener('click', cycleCamera);
+document.getElementById('pause-btn')!.addEventListener('click', () => {
+  dropFocus();
+  if (started && !menu.visible) setPaused(!paused);
+});
+
+/** Drops focus so a later Space (brake) can't "click" a button again. */
+function dropFocus(): void {
   (document.activeElement as HTMLElement | null)?.blur();
+}
+
+function cycleCamera(): void {
+  dropFocus();
+  hud.flash(`Kamera: ${CAMERA_NAMES[rig.cycle(model)]}`, timer.getElapsed(), 1.5);
+}
+
+function toggleMenu(): void {
+  dropFocus();
   if (!menu.visible) {
     setPaused(true);
     menu.show();
@@ -134,12 +171,12 @@ function handleEvents(events: FlightEvent[], now: number): void {
 /** Gentle tips for whatever the player is doing right now. */
 function updateHint(now: number): void {
   if (!started || menu.visible) return hud.hint(null, now);
-  if (paused) return hud.hint('Pauza — pritisni P za nastavak', now);
+  if (paused) return hud.hint(say('Pauza — pritisni P za nastavak', 'Pauza — dodirni ⏸ za nastavak'), now);
   if (model.crashed) return hud.hint(null, now);
-  if (model.stalled) return hud.hint('Presporo! Dodaj gas (R) i spusti nos', now, true);
+  if (model.stalled) return hud.hint(say('Presporo! Dodaj gas (R) i spusti nos', 'Presporo! Dodaj gas i spusti nos'), now, true);
   if (model.onGround && !hasFlown) {
-    if (model.throttle < 0.3 && model.speed < 5) return hud.hint('Drži R za gas! 🚀', now);
-    if (model.speed >= model.spec.rotateSpeed) return hud.hint('Sad drži W ili ↑ i poleti!', now);
+    if (model.throttle < 0.3 && model.speed < 5) return hud.hint(`${say('Drži R za gas', 'Povuci GAS gore')}! 🚀`, now);
+    if (model.speed >= model.spec.rotateSpeed) return hud.hint(say('Sad drži W ili ↑ i poleti!', 'Sad gurni palicu gore i poleti!'), now);
     return hud.hint(null, now);
   }
   const { x, z } = model.position;
@@ -159,13 +196,14 @@ function frame(time: number): void {
   if (input.wasTapped('Escape')) toggleMenu();
   const playing = started && !menu.visible;
   if (playing) {
+    if (input.wasTapped('KeyC')) cycleCamera();
     if (input.wasTapped('KeyP')) setPaused(!paused);
     if (input.wasTapped('KeyN')) respawn();
     if (input.wasTapped('KeyM')) hud.flash(sound.toggleMute() ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);
   }
 
   if (playing && !paused) {
-    const controls = input.controls();
+    const controls = touch.apply(input.controls());
     accumulator += dt;
     while (accumulator >= PHYSICS_STEP) {
       handleEvents(model.step(PHYSICS_STEP, controls, terrain), now);
@@ -173,7 +211,7 @@ function frame(time: number): void {
     }
     if (now >= respawnAt) respawn();
     aircraft!.update(model, dt);
-    chase.update(model, dt);
+    rig.update(model, dt);
     sound.update(model);
   }
   input.endFrame();
@@ -183,6 +221,7 @@ function frame(time: number): void {
   updateHint(now);
   hud.update(model, now, model.position.y - model.spec.gearHeight - below);
   minimap.update(model);
+  touch.update(model.throttle);
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);

@@ -4,6 +4,7 @@ export interface Controls {
   roll: number; // +1 = roll right
   yaw: number; // +1 = yaw right
   throttle: number; // +1 = more gas, -1 = less gas
+  throttleSet?: number; // touch slider: go to this throttle (0..1) instead
   brake: boolean;
 }
 

@@ -233,10 +233,26 @@ kbd {
   opacity: 0.75;
 }
 
-#menu-btn {
+#top-buttons {
   position: fixed;
   top: 16px;
   right: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.round-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  border: none;
+  border-radius: 50%;
+  background: var(--panel);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#menu-btn {
   font: inherit;
   font-weight: bold;
   color: var(--ink);
@@ -301,4 +317,165 @@ kbd {
 #start-btn:active {
   transform: translateY(4px);
   box-shadow: 0 2px 0 #d96a22;
+}
+
+/* ---------- phones and tablets ---------- */
+
+.touch-only {
+  display: none !important;
+}
+
+body.touch .touch-only {
+  display: revert !important;
+}
+
+body.touch .keys-only {
+  display: none;
+}
+
+#app canvas,
+#touch-ui * {
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+#touch-throttle {
+  position: fixed;
+  left: max(20px, env(safe-area-inset-left));
+  bottom: 20px;
+  width: 64px;
+  height: 180px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+}
+
+#touch-throttle-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  background: linear-gradient(0deg, var(--good), var(--accent));
+}
+
+#touch-throttle span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+#touch-brake {
+  position: fixed;
+  left: calc(max(20px, env(safe-area-inset-left)) + 80px);
+  bottom: 20px;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--warn);
+  color: #fff;
+  font: inherit;
+  font-weight: bold;
+}
+
+#touch-stick {
+  position: fixed;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: 24px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  border: 3px solid rgba(255, 255, 255, 0.9);
+}
+
+#touch-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70px;
+  height: 70px;
+  margin: -35px 0 0 -35px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* The bottom corners belong to the thumbs, so the map moves up and the help goes in the middle. */
+body.touch #minimap-box {
+  left: auto;
+  bottom: auto;
+  top: 70px;
+  right: 16px;
+}
+
+body.touch #minimap {
+  width: 110px;
+  height: 110px;
+}
+
+body.touch #minimap-info {
+  max-width: 110px;
+  font-size: 11px;
+}
+
+body.touch #help {
+  right: auto;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(360px, calc(100% - 400px));
+  min-width: 220px;
+  font-size: 13px;
+}
+
+#rotate-hint {
+  display: none;
+  position: fixed;
+  left: 50%;
+  bottom: 220px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--panel);
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+@media (orientation: portrait) {
+  body.touch #rotate-hint {
+    display: block;
+  }
+}
+
+@media (max-height: 500px) {
+  #hud {
+    top: 10px;
+    left: 10px;
+    gap: 6px;
+  }
+
+  .gauge {
+    min-width: 76px;
+    padding: 4px 10px;
+  }
+
+  .gauge .value {
+    font-size: 22px;
+  }
+
+  #message {
+    font-size: 20px;
+  }
 }

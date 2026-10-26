@@ -36,6 +36,7 @@ export type FlightEvent = 'takeoff' | 'touchdown' | 'crash' | 'splash';
 const GRAVITY_ALONG_PATH = 9.81 * 0.6; // softened: climbing slows you, diving speeds you up
 const MAX_SINK = 12; // m/s sink rate when fully stalled
 const THROTTLE_RATE = 0.5; // throttle change per second while a key is held
+const THROTTLE_FOLLOW = 1.5; // throttle change per second towards a touch slider position
 const ROLLING_FRICTION = 0.5; // m/s²
 const WATER_FRICTION = 2; // m/s², floats drag more than wheels
 const BRAKE_DECEL = 6; // m/s²
@@ -93,7 +94,12 @@ export class FlightModel {
     fwd.copy(FORWARD).applyQuaternion(this.quaternion);
     right.copy(RIGHT).applyQuaternion(this.quaternion);
 
-    this.throttle = MathUtils.clamp(this.throttle + c.throttle * THROTTLE_RATE * dt, 0, 1);
+    if (c.throttleSet !== undefined) {
+      const step = THROTTLE_FOLLOW * dt;
+      this.throttle += MathUtils.clamp(c.throttleSet - this.throttle, -step, step);
+    } else {
+      this.throttle = MathUtils.clamp(this.throttle + c.throttle * THROTTLE_RATE * dt, 0, 1);
+    }
 
     // 0 = no lift at all, 1 = wings fully flying.
     const lift = MathUtils.smoothstep(this.speed, s.stallSpeed * 0.6, s.stallSpeed);

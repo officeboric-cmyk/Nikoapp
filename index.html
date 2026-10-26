@@ -2,7 +2,7 @@
 <html lang="hr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Niko Leti</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -30,14 +30,19 @@
 
     <div id="help">
       <h2>Kako letjeti</h2>
-      <ul>
+      <ul class="keys-only">
         <li><kbd>R</kbd> više gasa &nbsp; <kbd>F</kbd> manje gasa</li>
         <li><kbd>W</kbd> / <kbd>↑</kbd> nos gore &nbsp; <kbd>S</kbd> / <kbd>↓</kbd> nos dolje</li>
         <li><kbd>A</kbd> / <kbd>←</kbd> lijevo &nbsp; <kbd>D</kbd> / <kbd>→</kbd> desno</li>
         <li><kbd>Q</kbd> / <kbd>E</kbd> kormilo</li>
         <li><kbd>Razmak</kbd> kočnica</li>
         <li><kbd>N</kbd> ispočetka &nbsp; <kbd>P</kbd> pauza</li>
-        <li><kbd>M</kbd> zvuk &nbsp; <kbd>H</kbd> pomoć &nbsp; <kbd>Esc</kbd> izbornik</li>
+        <li><kbd>M</kbd> zvuk &nbsp; <kbd>C</kbd> kamera &nbsp; <kbd>H</kbd> pomoć &nbsp; <kbd>Esc</kbd> izbornik</li>
+      </ul>
+      <ul class="touch-only">
+        <li>Lijevo: povuci <b>GAS</b> prema gore</li>
+        <li>Desno: palica upravlja avionom (gore = nos gore)</li>
+        <li><b>STOP</b> koči &nbsp; 🎥 kamera &nbsp; ⏸ pauza</li>
       </ul>
       <p class="hint">Daj gas, ubrzaj po pisti i povuci nos gore!</p>
     </div>
@@ -47,7 +52,22 @@
       <div id="minimap-info"></div>
     </div>
 
-    <button id="menu-btn" type="button">☰ Izbornik</button>
+    <div id="top-buttons">
+      <button id="pause-btn" class="round-btn touch-only" type="button" aria-label="Pauza">⏸</button>
+      <button id="cam-btn" class="round-btn" type="button" aria-label="Kamera">🎥</button>
+      <button id="menu-btn" type="button">☰ Izbornik</button>
+    </div>
+
+    <div id="touch-ui" class="touch-only">
+      <div id="touch-throttle">
+        <div id="touch-throttle-fill"></div>
+        <span>GAS</span>
+      </div>
+      <button id="touch-brake" type="button">STOP</button>
+      <div id="touch-stick"><div id="touch-knob"></div></div>
+    </div>
+
+    <div id="rotate-hint">Okreni mobitel 📱 za veći ekran</div>
 
     <div id="menu">
       <div class="menu-card">

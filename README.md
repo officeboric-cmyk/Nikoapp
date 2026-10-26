@@ -6,6 +6,8 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - **6 aerodroma** s pistom, tornjem, hangarom i vjetrokazom
 - **4 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!) i Putnički avion Niko Aira
 - mini-karta s najbližim aerodromom, imena otoka na nebu, zvuk motora
+- 3 kamere: iza aviona, iz kokpita (FPV) i sa strane
+- radi i na mobitelu i tabletu (kontrole na dodir)
 
 ## Igraj online
 
@@ -34,10 +36,19 @@ npm run preview  # pokreće gotovi build
 | `N` | ispočetka |
 | `P` | pauza |
 | `M` | zvuk uključen / isključen |
+| `C` | kamera: iza aviona → kokpit (FPV) → sa strane |
 | `Esc` | izbornik (odabir aviona i aerodroma) |
 | `H` | pomoć |
 
 Kontrole nisu obrnute kao u pravom avionu: `↑` diže nos.
+
+### Na mobitelu i tabletu
+
+- **lijevo:** povuci klizač **GAS** prema gore (ostaje gdje ga pustiš)
+- **desno:** palica upravlja avionom: gore = nos gore, lijevo/desno = nagib (na pisti: skretanje)
+- **STOP:** kočnica dok ga držiš
+- 🎥 kamera, ⏸ pauza, ☰ izbornik
+- na Androidu igra prelazi na cijeli ekran i okreće se vodoravno
 
 ## Kako je složeno
 
@@ -52,10 +63,11 @@ src/
   world/Terrain.ts        – visinske mape otoka, more, "koliko je visoko tlo ovdje?"
   world/Airport.ts        – pista, oznake, toranj, hangar, izravnavanje tla
   world/World.ts          – nebo, svjetlo, šume, sela, svjetionik, oblaci, imena otoka
-  camera/ChaseCamera.ts   – kamera iza aviona, horizont uvijek ravan, nikad u brdu
+  camera/CameraRig.ts     – 3 kamere (iza, kokpit/FPV, sa strane), nikad u brdu
   ui/HUD.ts               – brzina, visina iznad tla, gas, poruke, pomoć
   ui/Menu.ts              – odabir aviona i aerodroma
   ui/Minimap.ts           – mini-karta otoka
+  ui/TouchControls.ts     – klizač za gas, palica i kočnica za ekrane na dodir
   audio/Sound.ts          – motor, vjetar, kotači, upozorenje, efekti (Web Audio, bez datoteka)
 ```
 
@@ -69,9 +81,9 @@ Sletjeti se može i na travu; samo hidroavion smije na more.
 - [x] **Faza 0** – projekt (Vite + TypeScript + Three.js)
 - [x] **Faza 1** – avion, fizika leta, kontrole, ravni svijet s pistom
 - [x] **Faza 2** – pravi teren: 12 otoka, brda, more, 6 aerodroma
-- [ ] **Faza 3** – HUD instrumenti, više kamera (zvuk i mini-karta su gotovi)
+- [ ] **Faza 3** – HUD instrumenti (kamere, zvuk i mini-karta su gotovi)
 - [ ] **Faza 4** – bodovanje slijetanja
 - [ ] **Faza 5** – misije (prstenovi, slijetanje), izbornik
 - [x] **Faza 6** – više aviona (4) i lokacija
 - [ ] aviokompanije (boje i nazivi) za putnički avion
-- [ ] **Faza 7** – vrijeme, dan/noć, kontrole za mobitel
+- [ ] **Faza 7** – vrijeme, dan/noć (kontrole za mobitel su gotove)

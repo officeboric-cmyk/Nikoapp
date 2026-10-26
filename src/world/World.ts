@@ -37,14 +37,17 @@ export class World {
   private readonly sunOffset = new Vector3(80, 150, 60);
   private readonly labels: Sprite[] = [];
 
-  constructor(private readonly scene: Scene) {
+  constructor(
+    private readonly scene: Scene,
+    shadowMapSize = 2048,
+  ) {
     scene.background = new Color(SKY_COLOR);
     scene.fog = new Fog(SKY_COLOR, 2500, 12000);
 
     scene.add(new HemisphereLight(0xdff6ff, 0x5a8f3c, 1.4));
     this.sun = new DirectionalLight(0xffffff, 2.2);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     const cam = this.sun.shadow.camera;
     cam.left = cam.bottom = -SHADOW_RANGE;
     cam.right = cam.top = SHADOW_RANGE;

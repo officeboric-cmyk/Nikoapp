@@ -36,7 +36,8 @@ export interface AircraftType {
   description: string;
   spec: AircraftSpec;
   engine: 'prop' | 'jet';
-  camera: { distance: number; height: number };
+  // cockpit = pilot's eye, placed so the nose fills only the bottom of the FPV view
+  camera: { distance: number; height: number; cockpit: [number, number, number] };
   build(): AircraftModel;
 }
 
@@ -47,7 +48,7 @@ export const AIRCRAFT: AircraftType[] = [
     emoji: '🛩️',
     description: 'Lagan i poslušan. Najbolji za početak!',
     engine: 'prop',
-    camera: { distance: 13, height: 4 },
+    camera: { distance: 13, height: 4, cockpit: [0, 1.15, -1.6] },
     spec: {
       maxThrust: 6,
       maxSpeed: 60,
@@ -69,7 +70,7 @@ export const AIRCRAFT: AircraftType[] = [
     emoji: '⚡',
     description: 'Jako brz! Treba mu duga pista.',
     engine: 'jet',
-    camera: { distance: 15, height: 4.5 },
+    camera: { distance: 15, height: 4.5, cockpit: [0, 1.1, -3.6] },
     spec: {
       maxThrust: 14,
       maxSpeed: 120,
@@ -91,7 +92,7 @@ export const AIRCRAFT: AircraftType[] = [
     emoji: '🌊',
     description: 'Ima plovke: smije sletjeti na more!',
     engine: 'prop',
-    camera: { distance: 13, height: 4.5 },
+    camera: { distance: 13, height: 4.5, cockpit: [0, 1.0, -2.2] },
     spec: {
       maxThrust: 5,
       maxSpeed: 50,
@@ -113,7 +114,7 @@ export const AIRCRAFT: AircraftType[] = [
     emoji: '✈️',
     description: 'Velik i spor. Vozi putnike Niko Aira!',
     engine: 'jet',
-    camera: { distance: 40, height: 11 },
+    camera: { distance: 40, height: 11, cockpit: [0, 1.8, -12.6] },
     spec: {
       maxThrust: 5,
       maxSpeed: 85,
