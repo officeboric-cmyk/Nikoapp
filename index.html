@@ -9,35 +9,39 @@
   <body>
     <div id="app"></div>
 
-    <div id="hud">
-      <div class="gauge">
-        <span class="label">Brzina</span>
-        <span class="value" id="hud-speed">0</span>
-        <span class="unit">km/h</span>
+    <!-- One bar across the top, laid out by flexbox so its parts can never overlap. -->
+    <div id="topbar">
+      <div id="hud">
+        <div class="cell instrument">
+          <canvas id="hud-horizon" width="80" height="80"></canvas>
+          <span class="caption" id="hud-heading">S 0°</span>
+        </div>
+        <div class="cell">
+          <span class="value" id="hud-speed">0</span>
+          <span class="caption">km/h</span>
+        </div>
+        <div class="cell">
+          <span class="value" id="hud-alt">0</span>
+          <span class="caption">m visine</span>
+        </div>
+        <div class="cell hidden" id="hud-gear-gauge">
+          <span class="value" id="hud-gear">⬇</span>
+          <span class="caption">kotači</span>
+        </div>
+        <div class="gas keys-only" title="Gas"><div class="gas-fill" id="hud-throttle"></div></div>
       </div>
-      <div class="gauge">
-        <span class="label">Visina</span>
-        <span class="value" id="hud-alt">0</span>
-        <span class="unit">m</span>
-      </div>
-      <div class="gauge keys-only">
-        <span class="label">Gas</span>
-        <div class="bar"><div class="bar-fill" id="hud-throttle"></div></div>
-      </div>
-      <div class="gauge hidden" id="hud-gear-gauge">
-        <span class="label">Kotači</span>
-        <span class="value gear" id="hud-gear">⬇</span>
-        <span class="unit" id="hud-gear-text">dolje</span>
-      </div>
-      <div class="gauge instrument">
-        <canvas id="hud-horizon" width="56" height="56"></canvas>
-        <span class="unit" id="hud-heading">S 0°</span>
-      </div>
-    </div>
 
-    <div id="target" class="hidden">
-      <svg id="target-arrow" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" /><path d="M16 4 L26 16 L19.5 16 L19.5 27 L12.5 27 L12.5 16 L6 16 Z" /></svg>
-      <span id="target-text"></span>
+      <div id="target" class="hidden">
+        <svg id="target-arrow" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" /><path d="M16 4 L26 16 L19.5 16 L19.5 27 L12.5 27 L12.5 16 L6 16 Z" /></svg>
+        <span id="target-text"></span>
+      </div>
+
+      <div id="top-buttons">
+        <button id="pause-btn" class="round-btn touch-only" type="button" aria-label="Pauza">⏸</button>
+        <button id="gear-btn" class="round-btn hidden" type="button" aria-label="Kotači">🛞</button>
+        <button id="cam-btn" class="round-btn" type="button" aria-label="Kamera">🎥</button>
+        <button id="menu-btn" type="button" aria-label="Izbornik">☰<span class="btn-label"> Izbornik</span></button>
+      </div>
     </div>
 
     <div id="message"></div>
@@ -63,14 +67,6 @@
 
     <div id="minimap-box">
       <canvas id="minimap" width="180" height="180"></canvas>
-      <div id="minimap-info"></div>
-    </div>
-
-    <div id="top-buttons">
-      <button id="pause-btn" class="round-btn touch-only" type="button" aria-label="Pauza">⏸</button>
-      <button id="gear-btn" class="round-btn hidden" type="button" aria-label="Kotači">🛞</button>
-      <button id="cam-btn" class="round-btn" type="button" aria-label="Kamera">🎥</button>
-      <button id="menu-btn" type="button">☰ Izbornik</button>
     </div>
 
     <div id="touch-ui" class="touch-only">

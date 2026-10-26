@@ -18,7 +18,6 @@ export class HUD {
   private readonly help = el('help');
   private readonly gearGauge = el('hud-gear-gauge');
   private readonly gearIcon = el('hud-gear');
-  private readonly gearText = el('hud-gear-text');
 
   private flashText = '';
   private flashWarn = false;
@@ -54,9 +53,8 @@ export class HUD {
     if (!model.spec.retractableGear) return;
     const state = model.gear >= 0.99 ? 'down' : model.gear <= 0.01 ? 'up' : 'moving';
     for (const name of ['down', 'up', 'moving']) this.gearGauge.classList.toggle(name, name === state);
-    const [icon, text] = state === 'down' ? ['⬇', 'dolje'] : state === 'up' ? ['⬆', 'gore'] : ['↕', '…'];
+    const icon = state === 'down' ? '⬇' : state === 'up' ? '⬆' : '↕';
     if (this.gearIcon.textContent !== icon) this.gearIcon.textContent = icon;
-    if (this.gearText.textContent !== text) this.gearText.textContent = text;
   }
 
   toggleHelp(): void {

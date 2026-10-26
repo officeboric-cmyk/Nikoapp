@@ -25,67 +25,77 @@ body {
   display: block;
 }
 
-#hud {
+/* ---------- top bar: instruments · goal · buttons ---------- */
+
+#topbar {
   position: fixed;
-  top: 16px;
-  left: 16px;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  pointer-events: none; /* only its pieces catch clicks, not the gaps between them */
 }
 
-.gauge {
-  background: var(--panel);
-  border-radius: 16px;
-  padding: 8px 14px;
-  min-width: 110px;
+#topbar > * {
+  pointer-events: auto;
+}
+
+#hud {
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.gauge .label {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.7;
-}
-
-.gauge .value {
-  font-size: 30px;
-  font-weight: bold;
-  font-variant-numeric: tabular-nums;
-}
-
-.gauge .unit {
-  font-size: 12px;
-  opacity: 0.7;
-}
-
-.bar {
-  margin-top: 10px;
-  width: 90px;
-  height: 18px;
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.12);
+  gap: 2px;
+  padding: 6px 10px 8px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
-.bar-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--good), var(--accent));
-  transition: width 0.1s linear;
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 52px;
+  padding: 0 6px;
 }
 
-#hud .gauge.hidden,
-.round-btn.hidden {
+.cell + .cell {
+  border-left: 1px solid rgba(29, 53, 87, 0.12);
+}
+
+.cell.hidden {
   display: none;
 }
 
-.gauge .value.gear {
-  font-size: 24px;
+.cell .value {
+  font-size: 22px;
+  font-weight: bold;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell .caption {
+  font-size: 11px;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+.cell.instrument {
+  min-width: 0;
+}
+
+#hud-horizon {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 
 #hud-gear-gauge.down .value {
@@ -97,37 +107,39 @@ body {
 }
 
 #hud-gear-gauge.up .value {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
-#hud-horizon {
-  display: block;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+/* The gas: a thin line along the bottom of the instrument panel. */
+.gas {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.08);
 }
 
-.gauge.instrument {
-  min-width: 0;
-  gap: 2px;
+.gas-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--good), var(--accent));
+  transition: width 0.1s linear;
 }
 
+/* The goal sits in the middle and gives way (shortening its text) when space runs out. */
 #target {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 16px 6px 8px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 5px 14px 5px 5px;
   border-radius: 999px;
   background: var(--panel);
+  font-size: 15px;
   font-weight: bold;
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 #target.hidden {
@@ -135,8 +147,9 @@ body {
 }
 
 #target-arrow {
-  width: 34px;
-  height: 34px;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
 }
 
 #target-arrow circle {
@@ -147,16 +160,65 @@ body {
   fill: #fff;
 }
 
+#target-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#top-buttons {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* With a goal showing, it already pushes the buttons right. */
+#target:not(.hidden) + #top-buttons {
+  margin-left: 0;
+}
+
+.round-btn {
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  border: none;
+  border-radius: 50%;
+  background: var(--panel);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.round-btn.hidden {
+  display: none;
+}
+
+#menu-btn {
+  height: 40px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--ink);
+  background: var(--panel);
+  border: none;
+  border-radius: 999px;
+  padding: 0 14px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* Messages and tips: one line under the top bar, out of the way of the plane. */
 #message {
   position: fixed;
-  top: 22%;
+  top: 76px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: calc(100% - 32px);
-  padding: 12px 24px;
-  border-radius: 20px;
+  width: max-content;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 8px 18px;
+  border-radius: 14px;
   background: var(--panel);
-  font-size: 26px;
+  font-size: 18px;
   font-weight: bold;
   text-align: center;
   opacity: 0;
@@ -439,72 +501,23 @@ kbd {
   background: var(--accent);
 }
 
-#top-buttons {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  display: flex;
-  gap: 8px;
-}
-
-.round-btn {
-  width: 44px;
-  height: 44px;
-  font-size: 20px;
-  border: none;
-  border-radius: 50%;
-  background: var(--panel);
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-#menu-btn {
-  font: inherit;
-  font-weight: bold;
-  color: var(--ink);
-  background: var(--panel);
-  border: none;
-  border-radius: 999px;
-  padding: 10px 16px;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
 #minimap-box {
   position: fixed;
-  left: 16px;
-  bottom: 16px;
+  left: max(12px, env(safe-area-inset-left));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  padding: 5px;
   background: var(--panel);
-  border-radius: 16px;
-  padding: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 #minimap {
   display: block;
-  width: 180px;
-  height: 180px;
+  width: 150px;
+  height: 150px;
   border-radius: 10px;
 }
 
-#minimap-info {
-  margin-top: 6px;
-  max-width: 180px;
-  font-size: 13px;
-  font-weight: bold;
-  text-align: center;
-}
-
-@media (max-width: 600px) {
-  #minimap {
-    width: 120px;
-    height: 120px;
-  }
-
-  #minimap-info {
-    max-width: 120px;
-  }
-}
 
 #start-btn {
   margin-top: 22px;
@@ -618,32 +631,41 @@ button {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
-/* The bottom corners belong to the thumbs, so the map moves up and the help goes in the middle. */
+/* The bottom corners belong to the thumbs, so the map moves up under the buttons and the help goes in the middle. */
 body.touch #minimap-box {
   left: auto;
   bottom: auto;
-  top: 70px;
-  right: 16px;
+  top: 62px;
+  right: max(12px, env(safe-area-inset-right));
 }
 
 body.touch #minimap {
-  width: 110px;
-  height: 110px;
-}
-
-body.touch #minimap-info {
-  max-width: 110px;
-  font-size: 11px;
+  width: 96px;
+  height: 96px;
 }
 
 body.touch #help {
   right: auto;
   left: 50%;
-  bottom: 16px;
+  bottom: 12px;
   transform: translateX(-50%);
-  width: min(360px, calc(100% - 400px));
-  min-width: 220px;
-  font-size: 13px;
+  width: min(340px, calc(100% - 380px));
+  min-width: 230px;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+body.touch #help h2 {
+  font-size: 14px;
+}
+
+body.touch #help ul {
+  line-height: 1.5;
+}
+
+body.touch #message {
+  max-width: min(460px, calc(100% - 260px));
+  font-size: 15px;
 }
 
 #rotate-hint {
@@ -663,43 +685,73 @@ body.touch #help {
   body.touch #rotate-hint {
     display: block;
   }
+
+  /* Upright phone: tips go under the map, help above the thumb controls. */
+  body.touch #message {
+    top: 170px;
+    max-width: calc(100% - 32px);
+  }
+
+  body.touch #help {
+    bottom: 270px;
+    width: calc(100% - 32px);
+    max-width: 360px;
+    min-width: 0;
+  }
 }
 
-@media (max-height: 500px) {
-  #hud {
-    top: 10px;
-    left: 10px;
+/* Small screens: smaller numbers, icon-only menu button. */
+@media (max-width: 760px), (max-height: 500px) {
+  #topbar {
     gap: 6px;
+    padding-top: max(8px, env(safe-area-inset-top));
   }
 
-  .gauge {
-    min-width: 76px;
-    padding: 4px 10px;
+  #hud {
+    padding: 4px 6px 6px;
   }
 
-  .gauge .value {
-    font-size: 22px;
+  .cell {
+    min-width: 44px;
+    padding: 0 4px;
   }
 
-  #message {
-    font-size: 20px;
+  .cell .value {
+    font-size: 17px;
+  }
+
+  .cell .caption {
+    font-size: 10px;
   }
 
   #hud-horizon {
-    width: 40px;
-    height: 40px;
+    width: 28px;
+    height: 28px;
   }
-}
 
-/* Too narrow for the target pill beside the gauges: move it to the bottom (on phones, under them). */
-@media (max-width: 1200px) {
   #target {
-    top: auto;
-    bottom: 16px;
+    font-size: 12px;
+    padding: 4px 10px 4px 4px;
   }
 
-  body.touch #target {
-    bottom: auto;
-    top: 76px;
+  #target-arrow {
+    width: 24px;
+    height: 24px;
+  }
+
+  .round-btn,
+  #menu-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+    padding: 0;
+  }
+
+  .btn-label {
+    display: none;
+  }
+
+  #message {
+    top: 58px;
   }
 }

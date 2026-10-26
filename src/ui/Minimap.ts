@@ -6,15 +6,13 @@ import type { Terrain } from '../world/Terrain';
 
 const forward = new Vector3();
 
-/** A small map of all islands with the plane's position, heading and the nearest airport. */
+/** A small map of all islands with the plane's position and heading, other planes and the mission goal. */
 export class Minimap {
   private readonly canvas = document.getElementById('minimap') as HTMLCanvasElement;
-  private readonly info = document.getElementById('minimap-info')!;
   private readonly ctx = this.canvas.getContext('2d')!;
   private readonly background: HTMLCanvasElement;
-  private lastInfo = '';
 
-  constructor(private readonly terrain: Terrain) {
+  constructor(terrain: Terrain) {
     // The islands never change, so paint them once.
     const size = this.canvas.width;
     this.background = document.createElement('canvas');
@@ -93,14 +91,6 @@ export class Minimap {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-
-    const { airport, distance } = this.terrain.nearestAirport(model.position.x, model.position.z);
-    const km = (distance / 1000).toFixed(1).replace('.', ',');
-    const text = `✈ ${airport.name} · ${km} km`;
-    if (text !== this.lastInfo) {
-      this.info.textContent = text;
-      this.lastInfo = text;
-    }
   }
 
   private toMap(x: number, z: number): [number, number] {
