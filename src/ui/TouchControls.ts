@@ -17,11 +17,13 @@ export function isTouchDevice(): boolean {
 
 /**
  * On-screen controls for phones and tablets: a gas slider on the left, a joystick on
- * the right (push up = nose up, like the ↑ key) and a hold-to-brake button.
+ * the right (pulled back = nose up, like a real plane) and a hold-to-brake button.
  * Several fingers can be used at once.
  */
 export class TouchControls {
   readonly enabled = isTouchDevice();
+  /** Like a real plane: pulling the stick back (down the screen) lifts the nose. Off: pushing it up does. */
+  realControls = true;
   private pitch = 0;
   private roll = 0;
   private brake = false;
@@ -77,7 +79,8 @@ export class TouchControls {
       }
       this.knob.style.transform = `translate(${x * radius * KNOB_TRAVEL}px, ${y * radius * KNOB_TRAVEL}px)`;
       this.roll = deadzone(x);
-      this.pitch = deadzone(-y); // screen y grows downwards; pushing up lifts the nose
+      // Screen y grows downwards, so pulling the stick towards you is +y.
+      this.pitch = deadzone(this.realControls ? y : -y);
     };
     const release = (e: PointerEvent) => {
       if (e.pointerId !== finger) return;

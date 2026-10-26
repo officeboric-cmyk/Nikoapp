@@ -25,6 +25,7 @@ const PHYSICS_STEP = 1 / 120; // s, fixed so the flight feels the same at any fr
 const MAX_FRAME = 0.1; // s, ignore huge gaps (e.g. after switching tabs)
 const RESPAWN_DELAY = 2.5; // s after a crash
 const SHOW_AIRPORT_BEYOND = 1500; // m, the arrow points to the nearest airport once it is this far
+const GEAR_WARNING_HEIGHT = 150; // m, descending below this with the wheels up warns the player
 
 const touch = new TouchControls();
 const renderer = new WebGLRenderer({ antialias: true });
@@ -61,8 +62,14 @@ let respawnAt = Infinity;
 let accumulator = 0;
 let mission: MissionRun | null = null;
 
-const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, startFreeFlight, startMission, setEnvironment);
+const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, {
+  onStart: startFreeFlight,
+  onMission: startMission,
+  onEnvironment: setEnvironment,
+  onControls: setControls,
+});
 const missionDone = document.getElementById('mission-done')!;
+const gearButton = document.getElementById('gear-btn')!;
 
 function startFreeFlight(picked: Choice): void {
   endMission();
@@ -134,6 +141,27 @@ document.getElementById('md-free')!.addEventListener('click', () => {
   setPaused(false);
 });
 
+/** Real-plane controls (pull back = nose up) or the simpler "up is up". */
+function setControls(real: boolean): void {
+  input.realControls = touch.realControls = real;
+  const [upKeys, downKeys] = real ? ['<kbd>S</kbd> / <kbd>↓</kbd>', '<kbd>W</kbd> / <kbd>↑</kbd>'] : ['<kbd>W</kbd> / <kbd>↑</kbd>', '<kbd>S</kbd> / <kbd>↓</kbd>'];
+  document.getElementById('help-pitch')!.innerHTML = `${upKeys} nos gore &nbsp; ${downKeys} nos dolje`;
+  document.getElementById('help-stick')!.textContent = real
+    ? 'Desno: palica prema sebi = nos gore, od sebe = nos dolje'
+    : 'Desno: palica gore = nos gore, dolje = nos dolje';
+}
+
+/** How to lift or lower the nose with the current controls, for tips on screen. */
+function nose(): { upKeys: string; downKeys: string; upStick: string; downStick: string } {
+  return input.realControls
+    ? { upKeys: 'S ili ↓', downKeys: 'W ili ↑', upStick: 'povuci palicu prema sebi', downStick: 'gurni palicu od sebe' }
+    : { upKeys: 'W ili ↑', downKeys: 'S ili ↓', upStick: 'gurni palicu gore', downStick: 'povuci palicu dolje' };
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /** Picks the keyboard or the touch wording for a tip. */
 function say(keys: string, fingers: string): string {
   return touch.enabled ? fingers : keys;
@@ -164,6 +192,7 @@ function setup(picked: Choice): void {
     rig.distance = picked.aircraft.camera.distance;
     rig.height = picked.aircraft.camera.height;
     rig.cockpit.fromArray(picked.aircraft.camera.cockpit);
+    gearButton.classList.toggle('hidden', !picked.aircraft.spec.retractableGear);
     sound.setEngine(picked.aircraft.engine);
   }
   respawn();
@@ -187,9 +216,26 @@ function setPaused(value: boolean): void {
 
 setup(menu.choice); // show the plane on its runway behind the menu
 setEnvironment(menu.time, menu.weather);
+setControls(menu.realControls);
 
 document.getElementById('menu-btn')!.addEventListener('click', toggleMenu);
 document.getElementById('cam-btn')!.addEventListener('click', cycleCamera);
+gearButton.addEventListener('click', () => {
+  dropFocus();
+  if (started && !menu.visible && !paused) toggleGear();
+});
+
+function toggleGear(): void {
+  const result = model.toggleGear();
+  const messages = {
+    up: '🛞 Kotači se uvlače…',
+    down: '🛞 Kotači se izvlače…',
+    fixed: model.spec.floats ? 'Plovke se ne mogu uvući.' : 'Ovaj avion ima fiksne kotače.',
+    'on-ground': 'Kotači se mogu uvući tek u zraku.',
+  };
+  hud.flash(messages[result], timer.getElapsed(), 2);
+  if (result === 'up' || result === 'down') sound.gear();
+}
 document.getElementById('pause-btn')!.addEventListener('click', () => {
   dropFocus();
   if (started && !menu.visible) setPaused(!paused);
@@ -245,6 +291,9 @@ function handleEvents(events: FlightEvent[], now: number): void {
       if (record) sound.reward();
       else sound.touchdown();
       if (mission) applyMission(mission.onLanding(landing), now);
+    } else if (event === 'belly') {
+      hud.flash('Ups, zaboravio si kotače! 🛞 Avion klizi po trbuhu…', now, 4, true);
+      sound.scrape();
     } else if (event === 'crash') {
       hud.flash(mission ? 'Bum! Misija kreće ispočetka…' : 'Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
@@ -276,15 +325,18 @@ function currentTarget(): Target | null {
 }
 
 /** Gentle tips for whatever the player is doing right now. */
-function updateHint(now: number): void {
+function updateHint(now: number, altitude: number): void {
   if (!started || menu.visible) return hud.hint(null, now);
   if (paused) return hud.hint(say('Pauza — pritisni P za nastavak', 'Pauza — dodirni ⏸ za nastavak'), now);
   if (model.crashed) return hud.hint(null, now);
-  if (model.stalled) return hud.hint(say('Presporo! Dodaj gas (R) i spusti nos', 'Presporo! Dodaj gas i spusti nos'), now, true);
-  if (hillAhead(model, terrain)) return hud.hint(say('⛰️ Pazi, brdo! Povuci gore (W)!', '⛰️ Pazi, brdo! Gurni palicu gore!'), now, true);
+  const { upKeys, downKeys, upStick, downStick } = nose();
+  if (model.stalled) return hud.hint(say(`Presporo! Dodaj gas (R) i spusti nos (${downKeys})`, `Presporo! Dodaj gas i ${downStick}`), now, true);
+  if (hillAhead(model, terrain)) return hud.hint(say(`⛰️ Pazi, brdo! Digni nos (${upKeys})!`, `⛰️ Pazi, brdo! ${capitalize(upStick)}!`), now, true);
+  const landingWithoutWheels = model.spec.retractableGear && !model.gearDown && !model.onGround && altitude < GEAR_WARNING_HEIGHT && model.velocity.y < -1;
+  if (landingWithoutWheels) return hud.hint(say('🛞 Izvuci kotače (G)!', '🛞 Izvuci kotače (gumb 🛞)!'), now, true);
   if (model.onGround && !hasFlown) {
     if (model.throttle < 0.3 && model.speed < 5) return hud.hint(`${say('Drži R za gas', 'Povuci GAS gore')}! 🚀`, now);
-    if (model.speed >= model.spec.rotateSpeed) return hud.hint(say('Sad drži W ili ↑ i poleti!', 'Sad gurni palicu gore i poleti!'), now);
+    if (model.speed >= model.spec.rotateSpeed) return hud.hint(say(`Sad drži ${upKeys} i poleti!`, `Sad ${upStick} i poleti!`), now);
     return hud.hint(null, now);
   }
   const { x, z } = model.position;
@@ -305,6 +357,7 @@ function frame(time: number): void {
   const playing = started && !menu.visible && missionDone.classList.contains('hidden');
   if (playing) {
     if (input.wasTapped('KeyC')) cycleCamera();
+    if (input.wasTapped('KeyG') && !paused) toggleGear();
     if (input.wasTapped('KeyP')) setPaused(!paused);
     if (input.wasTapped('KeyN')) respawn();
     if (input.wasTapped('KeyM')) hud.flash(sound.toggleMute() ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);
@@ -317,6 +370,8 @@ function frame(time: number): void {
       handleEvents(model.step(PHYSICS_STEP, controls, terrain), now);
       accumulator -= PHYSICS_STEP;
     }
+    // After sliding to a stop on its belly, the plane goes back to the start.
+    if (model.bellyLanded && model.speed < 0.5 && respawnAt === Infinity) respawnAt = now + 2;
     if (now >= respawnAt) respawn();
     if (mission && !model.crashed) applyMission(mission.update(dt, model), now);
     checkDiscovery(now);
@@ -328,10 +383,11 @@ function frame(time: number): void {
   if (!paused) traffic.update(dt);
 
   const below = Math.max(terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
+  const altitude = model.position.y - model.spec.gearHeight - below;
   world.update(model.position, paused ? 0 : dt);
   environment.update(paused ? 0 : dt, camera.position);
-  updateHint(now);
-  hud.update(model, now, model.position.y - model.spec.gearHeight - below);
+  updateHint(now, altitude);
+  hud.update(model, now, altitude);
   const target = started ? currentTarget() : null;
   minimap.update(model, traffic.positions, mission ? target : null);
   instruments.update(model, target);

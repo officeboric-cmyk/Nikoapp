@@ -21,6 +21,8 @@ export interface AircraftSpec {
   turnRate: number; // rad/s heading change at a 90° bank
   gearHeight: number; // m from the plane's origin down to the wheels
   floats: boolean; // a seaplane: can land on and take off from water
+  retractableGear?: boolean; // the wheels can be pulled up in flight
+  bellyHeight?: number; // m from the plane's origin down to its belly (a wheels-up landing)
 }
 
 /** What the plane can bump into: the ground height in metres, open water wherever it is below SEA_LEVEL. */
@@ -31,7 +33,8 @@ export interface Ground {
 export const SEA_LEVEL = 0;
 export const FLAT_GROUND: Ground = { heightAt: () => 0 };
 
-export type FlightEvent = 'takeoff' | 'touchdown' | 'crash' | 'splash';
+export type FlightEvent = 'takeoff' | 'touchdown' | 'belly' | 'crash' | 'splash';
+export type GearCommand = 'up' | 'down' | 'fixed' | 'on-ground';
 
 const GRAVITY_ALONG_PATH = 9.81 * 0.6; // softened: climbing slows you, diving speeds you up
 const MAX_SINK = 12; // m/s sink rate when fully stalled
@@ -50,6 +53,9 @@ const CRASH_BANK = 0.5; // sin of the bank angle a touchdown can survive (~30°)
 const CRASH_NOSE_DOWN = -0.3; // sin of the pitch angle a touchdown can survive
 const CRASH_SLOPE = 0.35; // steepest hillside (rise over run) a touchdown can survive
 const LIFTOFF_CLIMB = 0.3; // m/s upward speed that counts as leaving the ground
+const GEAR_TIME = 3; // s for the wheels to go fully up or down
+const GEAR_DRAG_SAVING = 0.15; // less drag with the wheels up, so a little more top speed
+const BELLY_FRICTION = 4; // m/s², sliding on the belly after a wheels-up landing
 
 const FORWARD = new Vector3(0, 0, -1);
 const RIGHT = new Vector3(1, 0, 0);
@@ -75,6 +81,11 @@ export class FlightModel {
   readonly wind = new Vector3();
   /** 0 = calm air, 1 = bumpy: gently rocks the plane in flight. */
   turbulence = 0;
+  /** 1 = wheels down and locked, 0 = fully up; moves smoothly between. */
+  gear = 1;
+  /** Landed without wheels: slides to a stop and can't take off again. */
+  bellyLanded = false;
+  private gearTarget = 1;
   private time = 0;
 
   constructor(readonly spec: AircraftSpec) {}
@@ -90,6 +101,21 @@ export class FlightModel {
     this.onGround = true;
     this.stalled = false;
     this.crashed = false;
+    this.gear = this.gearTarget = 1;
+    this.bellyLanded = false;
+  }
+
+  /** True when the wheels are down or on their way down. */
+  get gearDown(): boolean {
+    return this.gearTarget === 1;
+  }
+
+  /** Raises or lowers the wheels, if this plane can and it is flying. */
+  toggleGear(): GearCommand {
+    if (!this.spec.retractableGear) return 'fixed';
+    if (this.onGround) return 'on-ground';
+    this.gearTarget = this.gearTarget === 1 ? 0 : 1;
+    return this.gearTarget === 1 ? 'down' : 'up';
   }
 
   /** Advances the simulation by `dt` seconds and returns what happened during the step. */
@@ -101,7 +127,10 @@ export class FlightModel {
     fwd.copy(FORWARD).applyQuaternion(this.quaternion);
     right.copy(RIGHT).applyQuaternion(this.quaternion);
 
-    if (c.throttleSet !== undefined) {
+    this.gear += MathUtils.clamp(this.gearTarget - this.gear, -dt / GEAR_TIME, dt / GEAR_TIME);
+    if (this.bellyLanded) {
+      this.throttle = 0;
+    } else if (c.throttleSet !== undefined) {
       const step = THROTTLE_FOLLOW * dt;
       this.throttle += MathUtils.clamp(c.throttleSet - this.throttle, -step, step);
     } else {
@@ -112,11 +141,12 @@ export class FlightModel {
     const lift = MathUtils.smoothstep(this.speed, s.stallSpeed * 0.6, s.stallSpeed);
 
     // --- speed along the nose ---
-    const drag = s.maxThrust / (s.maxSpeed * s.maxSpeed);
+    const drag = (s.maxThrust / (s.maxSpeed * s.maxSpeed)) * (1 - GEAR_DRAG_SAVING * (1 - this.gear));
     let accel = this.throttle * s.maxThrust - drag * this.speed * this.speed - GRAVITY_ALONG_PATH * fwd.y;
     if (this.onGround) {
       const onWater = ground.heightAt(this.position.x, this.position.z) < SEA_LEVEL;
-      accel -= (onWater ? WATER_FRICTION : ROLLING_FRICTION) + (c.brake ? BRAKE_DECEL : 0);
+      const friction = this.bellyLanded ? BELLY_FRICTION : onWater ? WATER_FRICTION : ROLLING_FRICTION;
+      accel -= friction + (c.brake ? BRAKE_DECEL : 0);
     }
     this.speed = Math.max(0, this.speed + accel * dt);
 
@@ -126,9 +156,9 @@ export class FlightModel {
     let yawIn = c.yaw;
     if (this.onGround) {
       // On the runway left/right steers the nose wheel; there is nothing to roll.
-      yawIn = MathUtils.clamp(yawIn + rollIn, -1, 1);
+      yawIn = this.bellyLanded ? 0 : MathUtils.clamp(yawIn + rollIn, -1, 1);
       rollIn = 0;
-      if (this.speed < s.rotateSpeed) pitchIn = Math.min(pitchIn, 0);
+      if (this.speed < s.rotateSpeed || this.bellyLanded) pitchIn = Math.min(pitchIn, 0);
     } else {
       // Let go of the keys and the plane flies straight and level again.
       if (rollIn === 0) rollIn = MathUtils.clamp(right.y * AUTO_LEVEL_ROLL, -1, 1);
@@ -174,7 +204,8 @@ export class FlightModel {
     // --- ground and water contact ---
     const terrain = ground.heightAt(this.position.x, this.position.z);
     const onWater = terrain < SEA_LEVEL;
-    const floor = Math.max(terrain, SEA_LEVEL) + s.gearHeight;
+    const wheelsReady = this.gear >= 0.99;
+    const floor = Math.max(terrain, SEA_LEVEL) + (wheelsReady ? s.gearHeight : (s.bellyHeight ?? s.gearHeight));
     const sinks = onWater && !s.floats;
     if (this.position.y <= floor || (this.onGround && this.velocity.y < LIFTOFF_CLIMB)) {
       // Below the surface, or rolling along it (also downhill): stay on it.
@@ -189,7 +220,8 @@ export class FlightModel {
         this.stalled = false;
         this.lastTouchdown.sink = Math.max(0, -this.velocity.y);
         this.lastTouchdown.bank = -right.y;
-        events.push('touchdown');
+        this.bellyLanded = !wheelsReady;
+        events.push(wheelsReady ? 'touchdown' : 'belly');
       } else if (sinks) {
         return this.crash(events, 'splash'); // rolled off the runway into the sea
       }

@@ -34,10 +34,11 @@ npm run preview  # pokreće gotovi build
 | Tipka | Radnja |
 |---|---|
 | `R` / `F` | više / manje gasa |
-| `W` `↑` / `S` `↓` | nos gore / dolje |
+| `S` `↓` / `W` `↑` | nos gore / dolje (kao palica u avionu: prema sebi = gore) |
 | `A` `←` / `D` `→` | nagib lijevo / desno (na pisti: skretanje) |
 | `Q` / `E` | kormilo |
 | `Razmak` | kočnica |
+| `G` | uvlačenje / izvlačenje kotača (mlažnjak i putnički avion) |
 | `N` | ispočetka |
 | `P` | pauza |
 | `M` | zvuk uključen / isključen |
@@ -45,14 +46,18 @@ npm run preview  # pokreće gotovi build
 | `Esc` | izbornik (misije, slobodno letenje, doba dana, vrijeme) |
 | `H` | pomoć |
 
-Kontrole nisu obrnute kao u pravom avionu: `↑` diže nos.
+Kontrole su kao u pravom avionu: palicu povučeš prema sebi (`↓` / `S`) i nos ide gore.
+Za mlađu djecu u izborniku postoji postavka **Palica: ⬆️ Gore = gore**, gdje `↑` / `W` diže nos.
+
+Kotači se mogu uvući samo u zraku. S uvučenim kotačima avion je malo brži, a ako zaboraviš
+izvući kotače, avion klizne po trbuhu i vrati se na početak.
 
 ### Na mobitelu i tabletu
 
 - **lijevo:** povuci klizač **GAS** prema gore (ostaje gdje ga pustiš)
-- **desno:** palica upravlja avionom: gore = nos gore, lijevo/desno = nagib (na pisti: skretanje)
+- **desno:** palica upravlja avionom: prema sebi = nos gore, od sebe = nos dolje, lijevo/desno = nagib (na pisti: skretanje)
 - **STOP:** kočnica dok ga držiš
-- 🎥 kamera, ⏸ pauza, ☰ izbornik
+- 🛞 kotači, 🎥 kamera, ⏸ pauza, ☰ izbornik
 - na Androidu igra prelazi na cijeli ekran i okreće se vodoravno
 
 ## Kako je složeno

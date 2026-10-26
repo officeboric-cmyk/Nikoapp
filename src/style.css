@@ -79,6 +79,27 @@ body {
   transition: width 0.1s linear;
 }
 
+#hud .gauge.hidden,
+.round-btn.hidden {
+  display: none;
+}
+
+.gauge .value.gear {
+  font-size: 24px;
+}
+
+#hud-gear-gauge.down .value {
+  color: var(--good);
+}
+
+#hud-gear-gauge.moving .value {
+  color: var(--accent);
+}
+
+#hud-gear-gauge.up .value {
+  opacity: 0.5;
+}
+
 #hud-horizon {
   display: block;
   width: 56px;
@@ -316,6 +337,13 @@ kbd {
   border-radius: 999px;
   padding: 5px 10px;
   cursor: pointer;
+}
+
+.pills-label {
+  align-self: center;
+  padding: 0 4px 0 8px;
+  font-size: 14px;
+  opacity: 0.75;
 }
 
 .pill.selected {

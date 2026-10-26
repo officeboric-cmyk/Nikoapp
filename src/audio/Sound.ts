@@ -180,6 +180,24 @@ export class Sound {
     this.noiseBurst('bandpass', 1000, 0.45, 1.1);
   }
 
+  /** The gear motor whirring for a few seconds, then a clunk as the wheels lock. */
+  gear(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.noiseBurst('bandpass', 350, 0.12, 2.8);
+    const t = ctx.currentTime + 2.9;
+    const clunkGain = gain(ctx, 0, this.master);
+    clunkGain.gain.setValueAtTime(0.3, t);
+    clunkGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    osc(ctx, 'sine', 90, clunkGain, t).stop(t + 0.25);
+  }
+
+  /** A long scrape: landing on the belly with the wheels up. */
+  scrape(): void {
+    if (!this.ctx) return;
+    this.noiseBurst('lowpass', 900, 0.4, 2.5);
+  }
+
   /** A soft, cartoonish "bump" rather than anything scary. */
   crash(): void {
     const ctx = this.ctx;

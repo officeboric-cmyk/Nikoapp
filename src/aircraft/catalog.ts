@@ -30,6 +30,7 @@ import { AIRLINES, type Airline } from './airlines';
 export interface AircraftModel {
   object: Group;
   propellers: Object3D[]; // spun around their local Z axis
+  gear: Group; // the wheels and their struts, folded away when retracted
 }
 
 export interface AircraftType {
@@ -87,6 +88,8 @@ export const AIRCRAFT: AircraftType[] = [
       turnRate: 1.1,
       gearHeight: 1.5,
       floats: false,
+      retractableGear: true,
+      bellyHeight: 0.75,
     },
     build: buildJet,
   },
@@ -132,6 +135,8 @@ export const AIRCRAFT: AircraftType[] = [
       turnRate: 0.6,
       gearHeight: 3.2,
       floats: false,
+      retractableGear: true,
+      bellyHeight: 2.9, // it ends up resting on its engines
     },
     build: buildAirliner,
   },
@@ -140,12 +145,17 @@ export const AIRCRAFT: AircraftType[] = [
 class Parts implements AircraftModel {
   readonly object = new Group();
   readonly propellers: Object3D[] = [];
+  readonly gear = new Group();
 
-  add(geometry: BufferGeometry, material: Material, x = 0, y = 0, z = 0): Mesh {
+  constructor() {
+    this.object.add(this.gear);
+  }
+
+  add(geometry: BufferGeometry, material: Material, x = 0, y = 0, z = 0, parent: Object3D = this.object): Mesh {
     const mesh = new Mesh(geometry, material);
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
-    this.object.add(mesh);
+    parent.add(mesh);
     return mesh;
   }
 
@@ -161,8 +171,8 @@ class Parts implements AircraftModel {
 
   /** A wheel centred at (x, y, z) with a strut of length `strut` going up from its axle. */
   wheel(radius: number, x: number, y: number, z: number, strut: number, material: Material): void {
-    this.add(new CylinderGeometry(radius, radius, radius * 0.7, 12).rotateZ(Math.PI / 2), material, x, y, z);
-    this.add(new BoxGeometry(radius * 0.35, strut, radius * 0.35), material, x, y + strut / 2, z);
+    this.add(new CylinderGeometry(radius, radius, radius * 0.7, 12).rotateZ(Math.PI / 2), material, x, y, z, this.gear);
+    this.add(new BoxGeometry(radius * 0.35, strut, radius * 0.35), material, x, y + strut / 2, z, this.gear);
   }
 
   /** Red light on the left wing tip, green on the right, white strobe on the tail (shown at night). */

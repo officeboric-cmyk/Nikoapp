@@ -103,6 +103,7 @@ export class Traffic {
     ROUTES.forEach((def, i) => {
       const type = AIRCRAFT.find((a) => a.id === def.aircraft)!;
       const model = type.build(def.airline ? airlineById(def.airline) : undefined);
+      if (type.spec.retractableGear) model.gear.visible = false; // always flying, so the wheels are tucked away
       const route = def.airports.map((name) => terrain.airports.find((a) => a.name === name)!);
       // Spread them out so they aren't all leaving the same airport at once.
       const flight = new Flight(def, model, route, 0.2 + ((i * 0.37) % 0.6));

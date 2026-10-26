@@ -17,6 +17,20 @@ const CHOICE_KEY = 'niko-leti-choice';
 
 type Tab = 'missions' | 'free';
 
+/** What the menu asks the game to do. */
+export interface MenuHandlers {
+  onStart(choice: Choice): void;
+  onMission(mission: MissionDef): void;
+  /** Called at once on a change, so the scene behind the menu shows it. */
+  onEnvironment(time: TimeOfDay, weather: Weather): void;
+  onControls(realControls: boolean): void;
+}
+
+const CONTROL_STYLES = [
+  { id: 'real', label: '✈️ Kao u avionu' },
+  { id: 'simple', label: '⬆️ Gore = gore' },
+];
+
 /**
  * The start screen, also opened with ☰ / Esc. Two tabs: missions to pick from, or free
  * flight with a plane, airline and airport of your choice.
@@ -30,26 +44,27 @@ export class Menu {
   private tab: Tab;
   time: TimeOfDay;
   weather: Weather;
+  /** Pulling back (↓ / S) lifts the nose, as in a real plane. */
+  realControls: boolean;
 
   constructor(
     aircraftTypes: AircraftType[],
     airports: Airport[],
     private readonly missions: MissionDef[],
     private readonly progress: Progress,
-    private readonly onStart: (choice: Choice) => void,
-    private readonly onMission: (mission: MissionDef) => void,
-    private readonly onEnvironment: (time: TimeOfDay, weather: Weather) => void,
+    private readonly handlers: MenuHandlers,
   ) {
     const saved = loadChoice();
     this.tab = saved?.tab === 'free' ? 'free' : 'missions';
     this.time = TIMES.find((t) => t.id === saved?.time)?.id ?? 'day';
     this.weather = WEATHERS.find((w) => w.id === saved?.weather)?.id ?? 'clear';
+    this.realControls = saved?.controls !== 'simple';
 
     // Time of day and weather apply straight away, so the scene behind the menu shows them.
     const pick = () => {
       this.save();
       this.render();
-      this.onEnvironment(this.time, this.weather);
+      this.handlers.onEnvironment(this.time, this.weather);
     };
     for (const { id, label } of TIMES) {
       pill(document.getElementById('env-time')!, id, label, () => {
@@ -61,6 +76,14 @@ export class Menu {
       pill(document.getElementById('env-weather')!, id, label, () => {
         this.weather = id;
         pick();
+      });
+    }
+    for (const { id, label } of CONTROL_STYLES) {
+      pill(document.getElementById('env-controls')!, id, label, () => {
+        this.realControls = id === 'real';
+        this.save();
+        this.render();
+        this.handlers.onControls(this.realControls);
       });
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('.tab')) {
@@ -76,7 +99,7 @@ export class Menu {
         this.hide();
         (document.activeElement as HTMLElement | null)?.blur();
         this.save();
-        this.onMission(mission);
+        this.handlers.onMission(mission);
       });
       button.dataset.id = mission.id;
       button.append(span('emoji', mission.emoji), bold(mission.title), span('stars', ''), small(mission.brief));
@@ -149,7 +172,7 @@ export class Menu {
     this.hide();
     (document.activeElement as HTMLElement | null)?.blur();
     this.save();
-    this.onStart(this.choice);
+    this.handlers.onStart(this.choice);
   }
 
   private save(): void {
@@ -161,6 +184,7 @@ export class Menu {
         tab: this.tab,
         time: this.time,
         weather: this.weather,
+        controls: this.realControls ? 'real' : 'simple',
       };
       localStorage.setItem(CHOICE_KEY, JSON.stringify(saved));
     } catch {
@@ -174,6 +198,9 @@ export class Menu {
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-time .pill')) {
       button.classList.toggle('selected', button.dataset.id === this.time);
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-controls .pill')) {
+      button.classList.toggle('selected', (button.dataset.id === 'real') === this.realControls);
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-weather .pill')) {
       button.classList.toggle('selected', button.dataset.id === this.weather);
@@ -211,6 +238,7 @@ interface SavedChoice {
   tab?: string;
   time?: string;
   weather?: string;
+  controls?: string;
 }
 
 function loadChoice(): SavedChoice | null {

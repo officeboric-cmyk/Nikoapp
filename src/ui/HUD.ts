@@ -16,6 +16,9 @@ export class HUD {
   private readonly throttle = el('hud-throttle');
   private readonly message = el('message');
   private readonly help = el('help');
+  private readonly gearGauge = el('hud-gear-gauge');
+  private readonly gearIcon = el('hud-gear');
+  private readonly gearText = el('hud-gear-text');
 
   private flashText = '';
   private flashWarn = false;
@@ -26,6 +29,7 @@ export class HUD {
     this.speed.textContent = String(Math.round(model.speed * 3.6));
     this.alt.textContent = String(Math.max(0, Math.round(altitude)));
     this.throttle.style.width = `${Math.round(model.throttle * 100)}%`;
+    this.updateGear(model);
     if (now < this.flashUntil) this.show(this.flashText, this.flashWarn);
   }
 
@@ -42,6 +46,17 @@ export class HUD {
     if (now < this.flashUntil) return;
     if (text) this.show(text, warn);
     else this.message.classList.remove('visible');
+  }
+
+  /** Wheels down / moving / up, only for planes whose wheels fold away. */
+  private updateGear(model: FlightModel): void {
+    this.gearGauge.classList.toggle('hidden', !model.spec.retractableGear);
+    if (!model.spec.retractableGear) return;
+    const state = model.gear >= 0.99 ? 'down' : model.gear <= 0.01 ? 'up' : 'moving';
+    for (const name of ['down', 'up', 'moving']) this.gearGauge.classList.toggle(name, name === state);
+    const [icon, text] = state === 'down' ? ['⬇', 'dolje'] : state === 'up' ? ['⬆', 'gore'] : ['↕', '…'];
+    if (this.gearIcon.textContent !== icon) this.gearIcon.textContent = icon;
+    if (this.gearText.textContent !== text) this.gearText.textContent = text;
   }
 
   toggleHelp(): void {

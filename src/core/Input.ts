@@ -12,6 +12,11 @@ export interface Controls {
 const BLOCKED = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
 
 export class Input {
+  /**
+   * Like a real plane: ↓ / S (stick pulled back) lifts the nose. Turned off, ↑ / W lifts it,
+   * which some younger kids find easier.
+   */
+  realControls = true;
   private held = new Set<string>();
   private tapped = new Set<string>();
 
@@ -34,7 +39,7 @@ export class Input {
 
   controls(): Controls {
     return {
-      pitch: this.axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']),
+      pitch: this.axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']) * (this.realControls ? -1 : 1),
       roll: this.axis(['KeyD', 'ArrowRight'], ['KeyA', 'ArrowLeft']),
       yaw: this.axis(['KeyE'], ['KeyQ']),
       throttle: this.axis(['KeyR', 'Equal', 'NumpadAdd'], ['KeyF', 'Minus', 'NumpadSubtract']),

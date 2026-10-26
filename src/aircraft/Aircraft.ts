@@ -20,6 +20,10 @@ export class Aircraft {
   update(flight: FlightModel, dt: number): void {
     this.object.position.copy(flight.position);
     this.object.quaternion.copy(flight.quaternion);
+    // Folding the wheels: squash the gear up towards the fuselage, then hide it.
+    const gear = this.model.gear;
+    gear.scale.y = Math.max(flight.gear, 0.05);
+    gear.visible = flight.gear > 0.05;
     if (flight.crashed) return;
     for (const prop of this.model.propellers) prop.rotation.z += (4 + flight.throttle * 40) * dt;
   }
