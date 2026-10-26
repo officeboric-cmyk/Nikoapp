@@ -291,6 +291,39 @@ kbd {
   display: none;
 }
 
+.env-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 16px;
+  margin-top: 10px;
+}
+
+.pills {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #f1f7fb;
+}
+
+.pill {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.pill.selected {
+  background: var(--accent);
+  color: #fff;
+  font-weight: bold;
+}
+
 .tabs {
   display: flex;
   gap: 8px;

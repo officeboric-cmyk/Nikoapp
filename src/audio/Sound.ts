@@ -9,6 +9,7 @@ import type { FlightModel } from '../physics/FlightModel';
 
 const MUTE_KEY = 'niko-leti-muted';
 const SMOOTH = 0.08; // s, time constant for continuous sounds following the plane
+const RAIN_VOLUME = 0.08;
 
 export class Sound {
   private ctx: AudioContext | null = null;
@@ -20,6 +21,8 @@ export class Sound {
   private propLfo!: OscillatorNode;
   private propDepth!: GainNode;
   private roarGain!: GainNode;
+  private rainGain!: GainNode;
+  private raining = false;
   private windFilter!: BiquadFilterNode;
   private windGain!: GainNode;
   private rumbleGain!: GainNode;
@@ -79,6 +82,15 @@ export class Sound {
     roarFilter.frequency.value = 900;
     roarFilter.connect(this.roarGain);
     source.connect(roarFilter);
+
+    // Rain: a soft high hiss.
+    this.rainGain = gain(ctx, this.raining ? RAIN_VOLUME : 0, this.master);
+    const rainFilter = ctx.createBiquadFilter();
+    rainFilter.type = 'bandpass';
+    rainFilter.frequency.value = 3500;
+    rainFilter.Q.value = 0.4;
+    rainFilter.connect(this.rainGain);
+    source.connect(rainFilter);
 
     this.rumbleGain = gain(ctx, 0, this.master);
     const rumbleFilter = ctx.createBiquadFilter();
@@ -141,6 +153,11 @@ export class Sound {
   /** Two friendly notes coming down. */
   touchdown(): void {
     this.chime([783.99, 523.25]);
+  }
+
+  setRain(raining: boolean): void {
+    this.raining = raining;
+    if (this.ctx) this.rainGain.gain.setTargetAtTime(raining ? RAIN_VOLUME : 0, this.ctx.currentTime, 0.5);
   }
 
   /** Switches between a propeller drone and a jet whine (when the player picks another plane). */

@@ -4,10 +4,15 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 
 - **12 otoka**: Sunčani, Zeleni, Planinski, Pješčani, Borov, Dugi, Vulkan, Ledeni, Kameni, Gusarski, Otok dupina i Otok svjetionika
 - **6 aerodroma** s pistom, tornjem, hangarom i vjetrokazom
-- **4 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!) i Putnički avion Niko Aira
-- mini-karta s najbližim aerodromom, imena otoka na nebu, zvuk motora
-- 3 kamere: iza aviona, iz kokpita (FPV) i sa strane
-- radi i na mobitelu i tabletu (kontrole na dodir)
+- **4 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!) i Putnički avion
+- **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
+- **11 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima
+- ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
+- **dan, zalazak i noć** (svjetla piste, svjetionik, zvijezde) i **vrijeme**: vedro, vjetar, kiša
+- drugi avioni lete između aerodroma
+- instrumenti (umjetni horizont, kompas), strelica do cilja, mini-karta, upozorenje „Pazi, brdo!"
+- 3 kamere: iza aviona, iz kokpita (FPV) i sa strane; zvuk motora, vjetra i kiše
+- radi i na mobitelu i tabletu (kontrole na dodir); napredak se pamti u pregledniku
 
 ## Igraj online
 
@@ -37,7 +42,7 @@ npm run preview  # pokreće gotovi build
 | `P` | pauza |
 | `M` | zvuk uključen / isključen |
 | `C` | kamera: iza aviona → kokpit (FPV) → sa strane |
-| `Esc` | izbornik (odabir aviona i aerodroma) |
+| `Esc` | izbornik (misije, slobodno letenje, doba dana, vrijeme) |
 | `H` | pomoć |
 
 Kontrole nisu obrnute kao u pravom avionu: `↑` diže nos.
@@ -56,19 +61,29 @@ Kontrole nisu obrnute kao u pravom avionu: `↑` diže nos.
 src/
   main.ts                 – pokretanje, glavna petlja, poruke igraču
   core/Input.ts           – tipkovnica → kontrole (-1..1)
-  physics/FlightModel.ts  – arkadna fizika leta (fiksni korak 120 Hz), tlo, more, strmine
-  aircraft/catalog.ts     – 4 aviona: fizika, kamera, zvuk i model od osnovnih oblika
+  physics/FlightModel.ts  – arkadna fizika leta (fiksni korak 120 Hz), tlo, more, strmine, vjetar
+  aircraft/catalog.ts     – 4 aviona: fizika, kamera, zvuk, model od osnovnih oblika, svjetla
+  aircraft/airlines.ts    – aviokompanije i njihove boje
   aircraft/Aircraft.ts    – vidljivi avion koji prati fiziku
+  game/missions.ts        – popis misija (lako dodati nove)
+  game/MissionRun.ts      – tijek misije: prstenovi, slijetanja, brodić, tura, zvjezdice
+  game/landing.ts         – ocjena slijetanja (1–3 zvjezdice)
+  game/hillWarning.ts     – upozorenje „Pazi, brdo!"
+  game/Progress.ts        – spremljeni napredak (zvjezdice, otkriveni otoci)
   world/islands.ts        – popis otoka i aerodroma (lako dodati nove)
   world/Terrain.ts        – visinske mape otoka, more, "koliko je visoko tlo ovdje?"
-  world/Airport.ts        – pista, oznake, toranj, hangar, izravnavanje tla
-  world/World.ts          – nebo, svjetlo, šume, sela, svjetionik, oblaci, imena otoka
+  world/Airport.ts        – pista, oznake, toranj, hangar, vjetrokaz, izravnavanje tla
+  world/World.ts          – svjetlo, šume, sela, svjetionik, oblaci, imena otoka, noćna svjetla
+  world/Environment.ts    – doba dana i vrijeme: nebo, sunce/mjesec, zvijezde, kiša, vjetar
+  world/Traffic.ts        – drugi avioni koji lete između aerodroma
+  world/lights.ts         – svjetleće točke (pista, avioni, svjetionik)
   camera/CameraRig.ts     – 3 kamere (iza, kokpit/FPV, sa strane), nikad u brdu
   ui/HUD.ts               – brzina, visina iznad tla, gas, poruke, pomoć
-  ui/Menu.ts              – odabir aviona i aerodroma
-  ui/Minimap.ts           – mini-karta otoka
+  ui/Instruments.ts       – umjetni horizont, kompas, strelica do cilja
+  ui/Menu.ts              – misije, slobodno letenje, doba dana, vrijeme
+  ui/Minimap.ts           – mini-karta otoka, drugih aviona i cilja
   ui/TouchControls.ts     – klizač za gas, palica i kočnica za ekrane na dodir
-  audio/Sound.ts          – motor, vjetar, kotači, upozorenje, efekti (Web Audio, bez datoteka)
+  audio/Sound.ts          – motor, vjetar, kiša, kotači, upozorenje, efekti (Web Audio, bez datoteka)
 ```
 
 **Fizika za djecu:** avion leti kamo gleda nos. Kad pustiš tipke, sam se izravna.
@@ -81,9 +96,8 @@ Sletjeti se može i na travu; samo hidroavion smije na more.
 - [x] **Faza 0** – projekt (Vite + TypeScript + Three.js)
 - [x] **Faza 1** – avion, fizika leta, kontrole, ravni svijet s pistom
 - [x] **Faza 2** – pravi teren: 12 otoka, brda, more, 6 aerodroma
-- [ ] **Faza 3** – HUD instrumenti (kamere, zvuk i mini-karta su gotovi)
-- [ ] **Faza 4** – bodovanje slijetanja
-- [ ] **Faza 5** – misije (prstenovi, slijetanje), izbornik
-- [x] **Faza 6** – više aviona (4) i lokacija
-- [ ] aviokompanije (boje i nazivi) za putnički avion
-- [ ] **Faza 7** – vrijeme, dan/noć (kontrole za mobitel su gotove)
+- [x] **Faza 3** – instrumenti, kamere, zvuk, mini-karta
+- [x] **Faza 4** – bodovanje slijetanja
+- [x] **Faza 5** – misije i izbornik
+- [x] **Faza 6** – više aviona (4), aviokompanije (4), promet u zraku
+- [x] **Faza 7** – doba dana, vrijeme, kontrole za mobitel

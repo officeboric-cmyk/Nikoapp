@@ -18,6 +18,7 @@ import { Minimap } from './ui/Minimap';
 import { TouchControls } from './ui/TouchControls';
 import { ISLANDS, MAP_HALF_SIZE } from './world/islands';
 import { Traffic } from './world/Traffic';
+import { Environment, type TimeOfDay, type Weather } from './world/Environment';
 import { World } from './world/World';
 
 const PHYSICS_STEP = 1 / 120; // s, fixed so the flight feels the same at any frame rate
@@ -40,6 +41,7 @@ const camera = new PerspectiveCamera(65, window.innerWidth / window.innerHeight,
 const world = new World(scene, touch.enabled ? 1024 : 2048);
 const terrain = world.terrain;
 const traffic = new Traffic(scene, terrain);
+const environment = new Environment(scene, world);
 const input = new Input();
 const hud = new HUD();
 const sound = new Sound();
@@ -59,7 +61,7 @@ let respawnAt = Infinity;
 let accumulator = 0;
 let mission: MissionRun | null = null;
 
-const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, startFreeFlight, startMission);
+const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, startFreeFlight, startMission, setEnvironment);
 const missionDone = document.getElementById('mission-done')!;
 
 function startFreeFlight(picked: Choice): void {
@@ -88,6 +90,13 @@ function begin(picked: Choice): void {
   started = true;
   setPaused(false);
   if (touch.enabled) goFullscreen();
+}
+
+function setEnvironment(time: TimeOfDay, weather: Weather): void {
+  environment.set(time, weather);
+  sound.setRain(weather === 'rain');
+  model.wind.copy(environment.wind);
+  model.turbulence = environment.turbulence;
 }
 
 function endMission(): void {
@@ -150,6 +159,8 @@ function setup(picked: Choice): void {
     aircraft = new Aircraft(picked.aircraft, airline);
     scene.add(aircraft.object);
     model = new FlightModel(picked.aircraft.spec);
+    model.wind.copy(environment.wind);
+    model.turbulence = environment.turbulence;
     rig.distance = picked.aircraft.camera.distance;
     rig.height = picked.aircraft.camera.height;
     rig.cockpit.fromArray(picked.aircraft.camera.cockpit);
@@ -175,6 +186,7 @@ function setPaused(value: boolean): void {
 }
 
 setup(menu.choice); // show the plane on its runway behind the menu
+setEnvironment(menu.time, menu.weather);
 
 document.getElementById('menu-btn')!.addEventListener('click', toggleMenu);
 document.getElementById('cam-btn')!.addEventListener('click', cycleCamera);
@@ -316,7 +328,8 @@ function frame(time: number): void {
   if (!paused) traffic.update(dt);
 
   const below = Math.max(terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
-  world.update(model.position);
+  world.update(model.position, paused ? 0 : dt);
+  environment.update(paused ? 0 : dt, camera.position);
   updateHint(now);
   hud.update(model, now, model.position.y - model.spec.gearHeight - below);
   const target = started ? currentTarget() : null;

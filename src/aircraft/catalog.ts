@@ -16,8 +16,10 @@ import {
   PlaneGeometry,
   Shape,
   SphereGeometry,
+  Vector3,
 } from 'three';
 import type { AircraftSpec } from '../physics/FlightModel';
+import { NAV_LIGHTS, lightPoints } from '../world/lights';
 import { AIRLINES, type Airline } from './airlines';
 
 /**
@@ -163,6 +165,16 @@ class Parts implements AircraftModel {
     this.add(new BoxGeometry(radius * 0.35, strut, radius * 0.35), material, x, y + strut / 2, z);
   }
 
+  /** Red light on the left wing tip, green on the right, white strobe on the tail (shown at night). */
+  navLights(wingTip: [number, number, number], tail: [number, number, number]): void {
+    const [x, y, z] = wingTip;
+    this.object.add(
+      lightPoints([new Vector3(-x, y, z)], NAV_LIGHTS.left),
+      lightPoints([new Vector3(x, y, z)], NAV_LIGHTS.right),
+      lightPoints([new Vector3(...tail)], NAV_LIGHTS.strobe),
+    );
+  }
+
   propeller(z: number, length: number, material: Material, x = 0, y = 0): void {
     const prop = new Group();
     const blade = new Mesh(new BoxGeometry(0.16, length, 0.06), material);
@@ -199,6 +211,7 @@ function buildTrainer(): AircraftModel {
   p.wheel(0.3, 1.2, -1.1, -0.6, 0.8, dark);
   p.wheel(0.3, 0, -1.1, -2.8, 0.8, dark);
   p.propeller(-3.75, 2.6, dark);
+  p.navLights([5, -0.15, -0.8], [0, 1.7, 3.7]);
   return p;
 }
 
@@ -221,6 +234,7 @@ function buildJet(): AircraftModel {
   p.tube(0.42, 0.5, 0.8, dark, 0, 0, 4.8);
   const glow = p.add(new CircleGeometry(0.38, 12), new MeshBasicMaterial({ color: 0xffa94d }), 0, 0, 5.21);
   glow.castShadow = false;
+  p.navLights([5, -0.1, 2.6], [0, 2.1, 4.2]);
   return p;
 }
 
@@ -260,6 +274,7 @@ function buildSeaplane(): AircraftModel {
     }
   }
   p.propeller(-3.95, 2.4, dark);
+  p.navLights([5.5, 0.85, -0.6], [0, 1.6, 3.5]);
   return p;
 }
 
@@ -295,6 +310,7 @@ function buildAirliner(airline: Airline = AIRLINES[0]): AircraftModel {
     const label = p.add(new PlaneGeometry(8, 1.3).rotateY((side * Math.PI) / 2), logo, side * 1.73, 1.25, -2);
     label.castShadow = false;
   }
+  p.navLights([13.4, -0.9, 3.4], [0, 7.1, 14.4]);
   return p;
 }
 

@@ -2,6 +2,7 @@ import {
   BoxGeometry,
   ConeGeometry,
   CylinderGeometry,
+  DoubleSide,
   Group,
   InstancedMesh,
   MathUtils,
@@ -26,6 +27,8 @@ export class Airport {
   readonly center: Vector3; // middle of the runway, at ground level
   readonly heading: number; // radians, FlightModel convention (0 = -Z, + = towards -X)
   readonly length: number;
+  /** Turns to show the wind (see pointWindsock). */
+  readonly windsock = new Group();
   private readonly dirX: number;
   private readonly dirZ: number;
 
@@ -63,6 +66,21 @@ export class Airport {
   /** How far the flattened area can reach from the runway centre. */
   get reach(): number {
     return Math.hypot(this.length / 2 + FLAT_ALONG, RUNWAY_WIDTH / 2 + FLAT_ACROSS) + FLAT_BLEND;
+  }
+
+  /** The world point `along` metres down the runway from its middle and `across` metres to its right, at ground level. */
+  pointAt(along: number, across: number): Vector3 {
+    return new Vector3(
+      this.center.x + this.dirX * along - this.dirZ * across,
+      this.center.y,
+      this.center.z + this.dirZ * along + this.dirX * across,
+    );
+  }
+
+  /** Turns the windsock's tail to point where the wind blows to. */
+  pointWindsock(windX: number, windZ: number): void {
+    // The sock's tail points along its local +X; the whole airport is turned by `heading`.
+    this.windsock.rotation.y = Math.atan2(-windZ, windX) - this.heading;
   }
 
   /** Where a plane lines up for take-off: near the start of the runway, facing along it. */
@@ -128,16 +146,19 @@ export class Airport {
     );
     hangar.position.set(side + 60, 0, half - 230);
 
-    // Windsock: shows kids which way the wind blows (it is always calm here, for now).
+    // Windsock: the wide mouth at the pole, the narrow tail streaming downwind.
     const pole = new Mesh(new CylinderGeometry(0.15, 0.15, 6, 6), white);
     pole.position.set(-side - 20, 3, half - 80);
     const sock = new Mesh(
-      new ConeGeometry(0.8, 3, 8, 1, true).rotateZ(Math.PI / 2),
-      new MeshStandardMaterial({ color: 0xff7f11, flatShading: true }),
+      new ConeGeometry(0.8, 3, 8, 1, true).rotateZ(-Math.PI / 2).translate(1.5, 0, 0),
+      new MeshStandardMaterial({ color: 0xff7f11, flatShading: true, side: DoubleSide }),
     );
-    sock.position.set(-side - 18.5, 5.6, half - 80);
+    sock.castShadow = true;
+    this.windsock.position.set(-side - 20, 5.6, half - 80);
+    this.windsock.add(sock);
+    group.add(this.windsock);
 
-    for (const mesh of [tower, cab, hangar, pole, sock]) {
+    for (const mesh of [tower, cab, hangar, pole]) {
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
     }

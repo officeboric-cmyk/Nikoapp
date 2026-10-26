@@ -4,6 +4,7 @@ import { starText } from '../game/landing';
 import type { MissionDef } from '../game/missions';
 import type { Progress } from '../game/Progress';
 import type { Airport } from '../world/Airport';
+import { TIMES, WEATHERS, type TimeOfDay, type Weather } from '../world/Environment';
 import { ISLANDS } from '../world/islands';
 
 export interface Choice {
@@ -27,6 +28,8 @@ export class Menu {
   private readonly root = document.getElementById('menu')!;
   private readonly airlineBox = document.getElementById('menu-airline-box')!;
   private tab: Tab;
+  time: TimeOfDay;
+  weather: Weather;
 
   constructor(
     aircraftTypes: AircraftType[],
@@ -35,9 +38,31 @@ export class Menu {
     private readonly progress: Progress,
     private readonly onStart: (choice: Choice) => void,
     private readonly onMission: (mission: MissionDef) => void,
+    private readonly onEnvironment: (time: TimeOfDay, weather: Weather) => void,
   ) {
     const saved = loadChoice();
     this.tab = saved?.tab === 'free' ? 'free' : 'missions';
+    this.time = TIMES.find((t) => t.id === saved?.time)?.id ?? 'day';
+    this.weather = WEATHERS.find((w) => w.id === saved?.weather)?.id ?? 'clear';
+
+    // Time of day and weather apply straight away, so the scene behind the menu shows them.
+    const pick = () => {
+      this.save();
+      this.render();
+      this.onEnvironment(this.time, this.weather);
+    };
+    for (const { id, label } of TIMES) {
+      pill(document.getElementById('env-time')!, id, label, () => {
+        this.time = id;
+        pick();
+      });
+    }
+    for (const { id, label } of WEATHERS) {
+      pill(document.getElementById('env-weather')!, id, label, () => {
+        this.weather = id;
+        pick();
+      });
+    }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('.tab')) {
       button.addEventListener('click', () => {
         this.tab = button.dataset.tab as Tab;
@@ -49,6 +74,7 @@ export class Menu {
     for (const mission of missions) {
       const button = choiceButton(missionList, () => {
         this.hide();
+        (document.activeElement as HTMLElement | null)?.blur();
         this.save();
         this.onMission(mission);
       });
@@ -121,14 +147,21 @@ export class Menu {
 
   start(): void {
     this.hide();
+    (document.activeElement as HTMLElement | null)?.blur();
     this.save();
     this.onStart(this.choice);
   }
 
   private save(): void {
-    (document.activeElement as HTMLElement | null)?.blur();
     try {
-      const saved = { aircraft: this.aircraft.id, airline: this.airline.id, airport: this.airport.name, tab: this.tab };
+      const saved = {
+        aircraft: this.aircraft.id,
+        airline: this.airline.id,
+        airport: this.airport.name,
+        tab: this.tab,
+        time: this.time,
+        weather: this.weather,
+      };
       localStorage.setItem(CHOICE_KEY, JSON.stringify(saved));
     } catch {
       // Storage can be blocked (private mode); the choice still works for this visit.
@@ -138,6 +171,12 @@ export class Menu {
   private render(): void {
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('.tab')) {
       button.classList.toggle('selected', button.dataset.tab === this.tab);
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-time .pill')) {
+      button.classList.toggle('selected', button.dataset.id === this.time);
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-weather .pill')) {
+      button.classList.toggle('selected', button.dataset.id === this.weather);
     }
     document.getElementById('tab-missions')!.classList.toggle('hidden', this.tab !== 'missions');
     document.getElementById('tab-free')!.classList.toggle('hidden', this.tab !== 'free');
@@ -165,7 +204,16 @@ export class Menu {
   }
 }
 
-function loadChoice(): { aircraft?: string; airline?: string; airport?: string; tab?: string } | null {
+interface SavedChoice {
+  aircraft?: string;
+  airline?: string;
+  airport?: string;
+  tab?: string;
+  time?: string;
+  weather?: string;
+}
+
+function loadChoice(): SavedChoice | null {
   try {
     return JSON.parse(localStorage.getItem(CHOICE_KEY) ?? 'null');
   } catch {
@@ -180,6 +228,16 @@ function choiceButton(parent: HTMLElement, onClick: () => void): HTMLButtonEleme
   button.addEventListener('click', onClick);
   parent.append(button);
   return button;
+}
+
+function pill(parent: HTMLElement, id: string, label: string, onClick: () => void): void {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'pill';
+  button.dataset.id = id;
+  button.textContent = label;
+  button.addEventListener('click', onClick);
+  parent.append(button);
 }
 
 function span(className: string, text: string): HTMLSpanElement {

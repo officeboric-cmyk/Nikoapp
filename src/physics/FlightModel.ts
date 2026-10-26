@@ -71,6 +71,11 @@ export class FlightModel {
   crashed = false;
   /** How the last touchdown went: sink rate (m/s) and sin of the bank angle (+ = right wing down). */
   readonly lastTouchdown = { sink: 0, bank: 0 };
+  /** Air movement (m/s) that carries the plane along while it flies. */
+  readonly wind = new Vector3();
+  /** 0 = calm air, 1 = bumpy: gently rocks the plane in flight. */
+  turbulence = 0;
+  private time = 0;
 
   constructor(readonly spec: AircraftSpec) {}
 
@@ -141,6 +146,13 @@ export class FlightModel {
     // Controls get mushy as the plane slows down.
     const authority = this.onGround ? 1 : 0.3 + 0.7 * lift;
     const yawRate = this.onGround ? s.groundSteerRate * Math.min(1, this.speed / 6) : s.yawRate * authority;
+    this.time += dt;
+    if (!this.onGround && this.turbulence > 0) {
+      // Smooth, irregular bumps (sums of slow waves), small enough that auto-level copes.
+      const t = this.time;
+      pitchIn += this.turbulence * 0.25 * Math.sin(t * 1.3) * Math.sin(t * 0.47);
+      rollIn += this.turbulence * 0.35 * Math.sin(t * 1.7 + 1) * Math.sin(t * 0.61);
+    }
     tmpEuler.set(pitchIn * s.pitchRate * authority * dt, -yawIn * yawRate * dt, -rollIn * s.rollRate * authority * dt);
     this.quaternion.multiply(tmpQ.setFromEuler(tmpEuler));
 
@@ -156,6 +168,7 @@ export class FlightModel {
     this.velocity.copy(fwd).multiplyScalar(this.speed);
     if (!this.onGround) this.velocity.y -= (1 - lift) * MAX_SINK;
     this.position.addScaledVector(this.velocity, dt);
+    if (!this.onGround) this.position.addScaledVector(this.wind, dt); // the wind carries you sideways
     this.stalled = !this.onGround && lift < 0.9;
 
     // --- ground and water contact ---

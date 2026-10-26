@@ -1,25 +1,32 @@
 import {
+  AdditiveBlending,
   BoxGeometry,
   CanvasTexture,
   Color,
   ConeGeometry,
   CylinderGeometry,
   DirectionalLight,
+  DoubleSide,
   Fog,
+  Group,
   HemisphereLight,
   IcosahedronGeometry,
   InstancedMesh,
   MathUtils,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
+  Object3D,
   Quaternion,
   Scene,
   Sprite,
   SpriteMaterial,
   Vector3,
 } from 'three';
+import { RUNWAY_WIDTH } from './Airport';
 import { MAP_HALF_SIZE, type IslandDef } from './islands';
+import { lightMaterial, lightPoints } from './lights';
 import { mulberry32, noise2 } from './noise';
 import { Terrain } from './Terrain';
 
@@ -33,8 +40,15 @@ const LABEL_SHOW_FAR = 1600; // m, fully visible from here on
 
 export class World {
   readonly terrain = new Terrain();
-  private readonly sun: DirectionalLight;
-  private readonly sunOffset = new Vector3(80, 150, 60);
+  readonly sun: DirectionalLight;
+  readonly sky: HemisphereLight;
+  /** Where the sun sits relative to the plane; the time of day moves it. */
+  readonly sunOffset = new Vector3(80, 150, 60);
+  /** Things that only show at night: runway lights, the lighthouse beam. */
+  readonly nightOnly: Object3D[] = [];
+  readonly cloudMaterial = new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 1, flatShading: true });
+  readonly windowsMaterial = new MeshStandardMaterial({ flatShading: true });
+  private readonly beams: Object3D[] = [];
   private readonly labels: Sprite[] = [];
 
   constructor(
@@ -44,7 +58,8 @@ export class World {
     scene.background = new Color(SKY_COLOR);
     scene.fog = new Fog(SKY_COLOR, 2500, 12000);
 
-    scene.add(new HemisphereLight(0xdff6ff, 0x5a8f3c, 1.4));
+    this.sky = new HemisphereLight(0xdff6ff, 0x5a8f3c, 1.4);
+    scene.add(this.sky);
     this.sun = new DirectionalLight(0xffffff, 2.2);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
@@ -60,12 +75,15 @@ export class World {
     this.addTrees(rand);
     this.addHouses(rand);
     this.addLighthouses();
+    this.addRunwayLights();
     this.addClouds(rand);
     this.addLabels();
+    for (const object of this.nightOnly) object.visible = false;
   }
 
-  /** Keeps the shadow-casting sun centred on the plane and fades labels that are too close. */
-  update(focus: Vector3): void {
+  /** Keeps the shadow-casting sun centred on the plane, fades labels that are too close and turns the lighthouse beams. */
+  update(focus: Vector3, dt: number): void {
+    for (const beam of this.beams) beam.rotation.y += dt * 0.8;
     this.sun.target.position.copy(focus);
     this.sun.position.copy(focus).add(this.sunOffset);
     for (const label of this.labels) {
@@ -163,11 +181,8 @@ export class World {
       }
     }
 
-    const walls = new InstancedMesh(
-      new BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
-      new MeshStandardMaterial({ flatShading: true }),
-      spots.length,
-    );
+    // The walls' material gets a warm glow at night, like lit windows.
+    const walls = new InstancedMesh(new BoxGeometry(1, 1, 1).translate(0, 0.5, 0), this.windowsMaterial, spots.length);
     const roofs = new InstancedMesh(
       new ConeGeometry(0.75, 0.6, 4).rotateY(Math.PI / 4).translate(0, 1.3, 0),
       new MeshStandardMaterial({ color: 0xc0392b, flatShading: true }),
@@ -203,17 +218,56 @@ export class World {
       const cap = new Mesh(new ConeGeometry(2.2, 2.5, 10), red);
       cap.position.set(island.x, base + 34.2, island.z);
       this.scene.add(light, cap);
+
+      // At night: a glowing lamp and two long beams sweeping round.
+      const lampTop = new Vector3(island.x, base + 31.5, island.z);
+      const glow = lightPoints([lampTop], lightMaterial(0xfff3b0, 26));
+      const beams = new Group();
+      beams.position.copy(lampTop);
+      const beamMaterial = new MeshBasicMaterial({
+        color: 0xfff3b0,
+        transparent: true,
+        opacity: 0.18,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+        fog: false,
+      });
+      for (const side of [-1, 1]) {
+        // A cone lying on its side, its tip at the lamp.
+        const beam = new Mesh(new ConeGeometry(40, 600, 16, 1, true).translate(0, -300, 0).rotateZ((side * Math.PI) / 2), beamMaterial);
+        beams.add(beam);
+      }
+      this.beams.push(beams);
+      this.nightOnly.push(glow, beams);
+      this.scene.add(glow, beams);
+    }
+  }
+
+  /** White lights along both runway edges, green at the start, red at the far end (shown at night). */
+  private addRunwayLights(): void {
+    const edge = lightMaterial(0xfff1c1, 7);
+    const green = lightMaterial(0x3dff6e, 9);
+    const red = lightMaterial(0xff3b3b, 9);
+    for (const airport of this.terrain.airports) {
+      const half = airport.length / 2;
+      const across = RUNWAY_WIDTH / 2 + 1;
+      const edges: Vector3[] = [];
+      for (let along = -half; along <= half; along += 50) {
+        edges.push(airport.pointAt(along, -across), airport.pointAt(along, across));
+      }
+      const ends = (along: number) => [-1, -0.5, 0, 0.5, 1].map((f) => airport.pointAt(along, f * across));
+      const lights = [lightPoints(edges, edge), lightPoints(ends(-half), green), lightPoints(ends(half), red)];
+      for (const points of lights) points.position.y = 0.5;
+      this.nightOnly.push(...lights);
+      this.scene.add(...lights);
     }
   }
 
   private addClouds(rand: () => number): void {
     const puffsPerCloud = 5;
     const clouds = 220;
-    const puffs = new InstancedMesh(
-      new IcosahedronGeometry(1, 1),
-      new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 1, flatShading: true }),
-      clouds * puffsPerCloud,
-    );
+    const puffs = new InstancedMesh(new IcosahedronGeometry(1, 1), this.cloudMaterial, clouds * puffsPerCloud);
     const m = new Matrix4();
     const noRotation = new Quaternion();
     let i = 0;
