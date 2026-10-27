@@ -29,6 +29,8 @@ export interface AircraftSpec {
   wingspan: number; // m, sets how close to the ground the cushion of air (ground effect) starts
   maxLoad: number; // g, the most the wings may be loaded: pulling harder than this stops working
   endurance: number; // s a full tank lasts at full throttle (normal and realistic; arcade never runs dry)
+  glideRatio: number; // metres forward per metre down, gliding at the best speed with the engine stopped
+  propeller: boolean; // a stopped propeller windmills and brakes more than a stopped jet engine
   floats: boolean; // a seaplane: can land on and take off from water
   retractableGear?: boolean; // the wheels can be pulled up in flight
   bellyHeight?: number; // m from the plane's origin down to its belly (a wheels-up landing)
@@ -80,8 +82,16 @@ const ARCADE_LIMITS = { bank: MathUtils.degToRad(60), pitch: MathUtils.degToRad(
 const STALL_ANGLE = MathUtils.degToRad(15); // angle of attack where the wing gives most lift
 const CL_ZERO = 0.25; // lift (as a share of the most) with the wing flat to the air
 const CL_FLAPS = 0.25; // extra lift with full flaps (so a slower stall)
-const FLAP_DRAG = 0.6; // extra drag with full flaps, as a share of the clean drag
-const INDUCED_DRAG = 0.08; // drag that comes with making lift
+const FLAP_DRAG = 0.6; // arcade: extra drag with full flaps, as a share of the clean drag
+// Normal and realistic drag. Real planes glide far without the engine (a small plane about 9 m forward per
+// metre down, an airliner about 17), furthest at about 1.4 × their stall speed; each plane's drag is set from
+// its glide ratio. The engine's push fades with speed, so full power still tops out at the plane's top speed.
+const BEST_GLIDE = 1.4; // × stall speed (flaps up) where a plane glides furthest
+const WINDMILL_DRAG = { propeller: 0.25, jet: 0.05 }; // a stopped engine turning in the wind: extra drag, share of the airframe's
+const FLAP_DRAG_SHARE = 1.2; // full flaps: extra drag, share of the airframe's
+const GEAR_DRAG_SHARE = 0.5; // retractable wheels down: extra drag, share of the airframe's (fixed wheels are part of it)
+const GLIDE_HOLD = 1.2; // normal, engine stopped: stick per share of speed off the best gliding speed
+const GLIDE_DAMP = 0.15; // ...and per m/s² the speed is changing (keeps the nose from see-sawing)
 const SIDE_GRIP = 0.8; // 1/s, the fuselage resisting sliding sideways (kept small: it mustn't hold the plane up)
 const PITCH_STABILITY = 1.5; // 1/s, how strongly the nose weathervanes back to the airflow
 const YAW_STABILITY = 6; // 1/s, how strongly the nose swings into the airflow sideways (the fin)
@@ -160,11 +170,21 @@ export class FlightModel {
    */
   trim = TRIM_ANGLE;
   private pitchHeld = false;
+  /** Normal and realistic: the airframe's drag (× airspeed²) and the drag of making lift (× lift × lift coefficient). */
+  private readonly airframeDrag: number;
+  private readonly inducedDrag: number;
+  private lastAirspeed = 0;
   private gearTarget = 1;
   private flapStage = 0;
   private time = 0;
 
-  constructor(readonly spec: AircraftSpec) {}
+  constructor(readonly spec: AircraftSpec) {
+    // Gliding at the best speed, the airframe's drag equals the drag of making lift, and lift ÷ drag is the glide ratio.
+    const best = BEST_GLIDE * spec.stallSpeed;
+    const total = G / (2 * spec.glideRatio * best * best); // with the stopped engine windmilling
+    this.airframeDrag = total / (1 + (spec.propeller ? WINDMILL_DRAG.propeller : WINDMILL_DRAG.jet));
+    this.inducedDrag = (total * best ** 4) / (G * spec.stallSpeed ** 2);
+  }
 
   /** Puts the plane down with its wheels at `position`, nose pointing along `heading` (radians, 0 = -Z). */
   reset(position: Vector3, heading: number): void {
@@ -268,6 +288,21 @@ export class FlightModel {
     return this.spec.maxThrust * (this.realism === 'realistic' ? REALISTIC_THRUST : 1);
   }
 
+  /**
+   * Normal and realistic drag (× airspeed²): the airframe plus flaps, wheels and a stopped engine, and the
+   * engine's push fading with speed (counted here as drag that grows with the throttle) so that full power
+   * reaches the top speed, but no faster.
+   */
+  private airDrag(): number {
+    const s = this.spec;
+    let extra = FLAP_DRAG_SHARE * this.flaps;
+    if (s.retractableGear) extra += GEAR_DRAG_SHARE * this.gear;
+    if (!this.engineRunning) extra += s.propeller ? WINDMILL_DRAG.propeller : WINDMILL_DRAG.jet;
+    const topSpeedDrag = (this.maxThrust / (s.maxSpeed * s.maxSpeed)) * (s.retractableGear ? 1 - GEAR_DRAG_SAVING : 1);
+    return this.airframeDrag * (1 + extra) + this.power * Math.max(0, topSpeedDrag - this.airframeDrag);
+  }
+
+  /** Arcade (and on the ground): drag (× speed²) that makes full power reach the top speed. */
   private dragFactor(): number {
     const s = this.spec;
     const clean = (this.maxThrust / (s.maxSpeed * s.maxSpeed)) * (1 - GEAR_DRAG_SAVING * (1 - this.gear));
@@ -398,7 +433,7 @@ export class FlightModel {
     force.addScaledVector(fwd, this.power * this.maxThrust);
     liftDir.crossVectors(right, airDir).normalize(); // perpendicular to the airflow, towards the canopy
     force.addScaledVector(liftDir, lift);
-    const drag = this.dragFactor() * airspeed * airspeed + INDUCED_DRAG * lift * Math.max(cl, 0);
+    const drag = this.airDrag() * airspeed * airspeed + this.inducedDrag * lift * Math.max(cl, 0);
     force.addScaledVector(airDir, -drag);
     force.addScaledVector(right, -air.dot(right) * SIDE_GRIP); // the fuselage resists sliding sideways
     if (this.turbulence > 0) force.y += this.turbulence * 2.5 * Math.sin(this.time * 2.1) * Math.sin(this.time * 0.73);
@@ -427,7 +462,12 @@ export class FlightModel {
     if (helped) {
       // Let go and the wings level and the plane holds its height.
       if (input.roll === 0) input.roll = MathUtils.clamp(right.y * NORMAL_LEVEL_ROLL, -1, 1);
-      if (input.pitch === 0 && !this.stalled) {
+      if (input.pitch === 0 && !this.stalled && !this.engineRunning) {
+        // No engine: keep the best gliding speed (the nose lower when slow, higher when fast), as a pilot does.
+        const best = BEST_GLIDE * stallSpeed;
+        const speeding = (airspeed - this.lastAirspeed) / dt;
+        input.pitch = MathUtils.clamp(((airspeed - best) / best) * GLIDE_HOLD + speeding * GLIDE_DAMP, -0.6, 0.6);
+      } else if (input.pitch === 0 && !this.stalled) {
         // Hold the height, and in a bank pull a little, as a pilot does to keep a turn level.
         const extraLift = 1 / Math.max(Math.cos(Math.asin(MathUtils.clamp(-right.y, -1, 1))), 0.3) - 1;
         input.pitch = MathUtils.clamp(-this.velocity.y * NORMAL_HOLD_HEIGHT + extraLift * NORMAL_TURN_PULL, -0.6, 0.6);
@@ -441,6 +481,7 @@ export class FlightModel {
       if (input.pitch > 0) input.pitch *= MathUtils.clamp(room, 0, 1);
       if (speedRoom < 0) input.pitch = Math.min(input.pitch, speedRoom);
     }
+    this.lastAirspeed = airspeed;
     const gust = this.gusts();
     // The nose weathervanes into the airflow, harder when stalled so it drops and the plane recovers.
     // Realistic: the elevator moves the angle of attack the tail settles the wing at (back stick = more, up to past the stall).

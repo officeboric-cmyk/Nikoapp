@@ -14,6 +14,10 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
 - ⛽ **gorivo** (u normalnom i realističnom načinu): troši se više uz više gasa, upozorenje na 25 % i 10 %,
   bez goriva motor stane i avion kliži; stani bilo gdje na aerodromu i rezervoar se napuni
+- bez motora avion **ne gubi uzgon** dok ima brzine, nego kliži kao pravi: mali avion ~9 m naprijed za
+  svaki metar spuštanja, hidroavion ~8 (plovci koče), mlažnjak ~11, putnički ~17; najdalje kod ~1,4×
+  brzine gubitka uzgona. Propeler koji se vrti na vjetru koči više od ugašenog mlaznog motora, a izvučeni
+  kotači i zakrilca klizanje skraćuju. U normalnom načinu pomoćnik sam drži najbolju brzinu klizanja
 - 🏅 **18 znački** (prvi let, 100 slijetanja, svi aerodromi, looping, valjak, iznad oblaka, noćni pilot,
   vatrogasac, diploma škole…) i **rekordi** (najveća visina i brzina, najmekše slijetanje, preletjeni km)
 - 👧👦 **više pilota** na istom uređaju: svaki ima svoje ime, zvjezdice, otoke i značke
