@@ -102,6 +102,8 @@ function startMission(def: MissionDef): void {
   begin(picked);
   mission = new MissionRun(def, scene, terrain, picked.airport, effects);
   dropButton.classList.toggle('hidden', !mission.canDrop);
+  dropButton.textContent = mission.dropIcon;
+  dropButton.setAttribute('aria-label', mission.dropIcon === '📦' ? 'Baci paket' : 'Baci vodu');
   hud.flash(`${def.emoji} ${def.brief}`, timer.getElapsed(), 5);
 }
 

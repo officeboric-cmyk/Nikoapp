@@ -2,6 +2,7 @@ import {
   AdditiveBlending,
   MathUtils,
   BoxGeometry,
+  CanvasTexture,
   CircleGeometry,
   ConeGeometry,
   CylinderGeometry,
@@ -10,7 +11,9 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  PlaneGeometry,
   Scene,
+  SphereGeometry,
   TorusGeometry,
   Vector3,
 } from 'three';
@@ -40,6 +43,33 @@ const DROP_HIT = 70; // m from a fire's middle that the water must land within
 const AIMING_RANGE = 800; // m from a fire where the blue circle shows where the water would land
 const DROP_TIME = 1.2; // s the water pours out
 const FIRE_SPACING = 250; // m between fires
+
+// --- parcels ---
+const PARCEL_MIN_HEIGHT = 30; // m above the ground, so the parachute has time to open
+const CHUTE_DELAY = 1; // s of free fall before the parachute opens
+const CHUTE_SINK = 6; // m/s down under the parachute
+const TARGET_HIT = 60; // m from a target's middle that counts
+const TARGET_PERFECT = 20; // m: right in the middle
+const TARGET_SIZE = 130; // m across the painted target
+const PARCEL_GAP = 1; // s between two parcels
+const PARCEL_STAYS = 8; // s a landed parcel stays on the ground
+
+interface DropTarget {
+  position: Vector3;
+  island: string;
+  hit: boolean;
+  paint: MeshBasicMaterial;
+}
+
+/** A parcel falling (then floating down on its parachute), or lying where it landed. */
+interface Parcel {
+  object: Group;
+  chute: Mesh;
+  velocity: Vector3;
+  age: number;
+  landedAt: number | null;
+  heading: Vector3; // which way the plane flew when it dropped it (to say "too early / too late")
+}
 
 interface Fire {
   position: Vector3;
@@ -73,7 +103,10 @@ export class MissionRun {
   /** Fire mission: water in the tank, 0 = empty, 1 = full. */
   water = 0;
   private pouring = 0; // s of water still falling out of the tank
-  private aim?: Mesh; // the blue circle where the water would land
+  private aim?: Mesh; // the blue circle where the water (or a parcel) would land
+  private readonly targets: DropTarget[] = [];
+  private readonly parcels: Parcel[] = [];
+  private lastDrop = -Infinity;
 
   constructor(
     readonly def: MissionDef,
@@ -91,8 +124,9 @@ export class MissionRun {
     const goal = def.goal;
     if (goal.kind === 'rings') this.buildRings(goal);
     if (goal.kind === 'splashdown' && goal.boat) this.buildBoat(goal.x, goal.z);
-    if (goal.kind === 'fire') {
-      this.buildFires(goal);
+    if (goal.kind === 'parcels') this.buildTargets(goal);
+    if (goal.kind === 'fire' || goal.kind === 'parcels') {
+      if (goal.kind === 'fire') this.buildFires(goal);
       this.aim = new Mesh(
         new TorusGeometry(DROP_HIT * 0.6, 2.5, 6, 32).rotateX(Math.PI / 2),
         new MeshBasicMaterial({ color: 0x4cc9f0, transparent: true, opacity: 0.8, depthWrite: false }),
@@ -118,6 +152,10 @@ export class MissionRun {
     this.water = 0;
     this.pouring = 0;
     for (const fire of this.fires) fire.strength = 1;
+    for (const target of this.targets) target.hit = false;
+    for (const parcel of this.parcels) this.group.remove(parcel.object);
+    this.parcels.length = 0;
+    this.lastDrop = -Infinity;
     this.refreshVisuals();
   }
 
@@ -140,12 +178,19 @@ export class MissionRun {
         return `🗺️ Otoci ${this.visited.size}/${goal.islands.length}${time}`;
       case 'fire':
         return `🔥 ${this.firesOut}/${goal.fires} · 💧 ${Math.round(this.water * 100)} %${time}`;
+      case 'parcels':
+        return `📦 Mete ${this.targets.filter((t) => t.hit).length}/${this.targets.length}${time}`;
     }
   }
 
-  /** This mission has something to drop (key B or the 💧 button). */
+  /** This mission has something to drop (key B or the 💧 / 📦 button). */
   get canDrop(): boolean {
-    return this.goal.kind === 'fire';
+    return this.goal.kind === 'fire' || this.goal.kind === 'parcels';
+  }
+
+  /** The drop button's picture. */
+  get dropIcon(): string {
+    return this.goal.kind === 'parcels' ? '📦' : '💧';
   }
 
   private get firesOut(): number {
@@ -194,6 +239,11 @@ export class MissionRun {
       if (update) return update;
     }
 
+    if (goal.kind === 'parcels') {
+      const update = this.updateParcels(dt, model);
+      if (update) return update;
+    }
+
     if (goal.kind === 'splashdown' && model.onGround && model.speed < STOPPED) {
       const onWater = this.terrain.heightAt(model.position.x, model.position.z) < SEA_LEVEL;
       const near = Math.hypot(model.position.x - goal.x, model.position.z - goal.z) < SPLASHDOWN_RADIUS;
@@ -237,9 +287,11 @@ export class MissionRun {
     return null;
   }
 
-  /** The player dropped the load (water on a fire). */
+  /** The player dropped the load (water on a fire, or a parcel). */
   drop(model: FlightModel): MissionUpdate | null {
-    if (this.finished || this.goal.kind !== 'fire') return null;
+    if (this.finished) return null;
+    if (this.goal.kind === 'parcels') return this.dropParcel(model);
+    if (this.goal.kind !== 'fire') return null;
     if (this.water < 0.05) return { message: '💧 Spremnik je prazan! Kliži po moru da ga napuniš', warn: true };
     const amount = this.water;
     this.water = 0;
@@ -262,6 +314,124 @@ export class MissionRun {
     const goal = this.goal;
     if (this.firesOut === goal.fires) return this.finish(timeStars(this.elapsed, goal.par), `Vrijeme: ${formatTime(this.elapsed)}`);
     return { message: `🔥 Ugašeno! (${this.firesOut}/${goal.fires})` };
+  }
+
+  /** A parcel leaves the plane: it falls, opens its parachute and floats down. */
+  private dropParcel(model: FlightModel): MissionUpdate | null {
+    if (model.onGround) return { message: '📦 Paket se baca u letu, iznad mete', warn: true };
+    const height = model.position.y - model.spec.gearHeight - Math.max(this.terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
+    if (height < PARCEL_MIN_HEIGHT) return { message: `📦 Prenisko! Popni se iznad ${PARCEL_MIN_HEIGHT} m da se padobran stigne otvoriti`, warn: true };
+    if (this.elapsed - this.lastDrop < PARCEL_GAP) return null;
+    this.lastDrop = this.elapsed;
+    const object = new Group();
+    const box = new Mesh(new BoxGeometry(1, 0.8, 1), new MeshStandardMaterial({ color: 0xb07a3c, roughness: 0.8 }));
+    const chute = new Mesh(
+      new SphereGeometry(3, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new MeshStandardMaterial({ color: 0xff6b35, roughness: 0.7, side: DoubleSide }),
+    );
+    chute.position.y = 4;
+    chute.scale.setScalar(0.01);
+    box.castShadow = chute.castShadow = true;
+    object.add(box, chute);
+    object.position.copy(model.position).setY(model.position.y - 1.5);
+    this.group.add(object);
+    const heading = model.velocity.clone().setY(0).normalize();
+    this.parcels.push({ object, chute, velocity: model.velocity.clone(), age: 0, landedAt: null, heading });
+    return { message: '📦 Paket je pao! Gledaj padobran…' };
+  }
+
+  /** Parcels fall and land; a landing on a target is a hit. The blue circle shows where the next one would land. */
+  private updateParcels(dt: number, model: FlightModel): MissionUpdate | null {
+    let update: MissionUpdate | null = null;
+    for (const parcel of [...this.parcels]) {
+      if (parcel.landedAt !== null) {
+        if (this.elapsed - parcel.landedAt > PARCEL_STAYS) {
+          this.group.remove(parcel.object);
+          this.parcels.splice(this.parcels.indexOf(parcel), 1);
+        }
+        continue;
+      }
+      parcel.age += dt;
+      stepParcel(parcel.object.position, parcel.velocity, parcel.age, dt, model.wind);
+      if (parcel.age > CHUTE_DELAY) parcel.chute.scale.setScalar(Math.min(1, (parcel.age - CHUTE_DELAY) * 2));
+      const ground = Math.max(this.terrain.heightAt(parcel.object.position.x, parcel.object.position.z), SEA_LEVEL);
+      if (parcel.object.position.y <= ground + 0.4) {
+        parcel.object.position.y = ground + 0.4;
+        parcel.landedAt = this.elapsed;
+        parcel.chute.scale.set(1, 0.15, 1); // the parachute collapses over it
+        update = this.scoreParcel(parcel) ?? update;
+      }
+    }
+    if (this.aim) {
+      const near = this.targets.some((t) => !t.hit && Math.hypot(t.position.x - model.position.x, t.position.z - model.position.z) < AIMING_RANGE);
+      this.aim.visible = near && !model.onGround;
+      if (this.aim.visible) {
+        const landing = this.parcelLanding(model);
+        this.aim.position.set(landing.x, Math.max(this.terrain.heightAt(landing.x, landing.z), SEA_LEVEL) + 3, landing.z);
+      }
+    }
+    return update;
+  }
+
+  private scoreParcel(parcel: Parcel): MissionUpdate | null {
+    const p = parcel.object.position;
+    const left = this.targets.filter((t) => !t.hit);
+    if (!left.length) return null;
+    const target = left.reduce((a, b) => (Math.hypot(a.position.x - p.x, a.position.z - p.z) < Math.hypot(b.position.x - p.x, b.position.z - p.z) ? a : b));
+    const miss = Math.hypot(target.position.x - p.x, target.position.z - p.z);
+    if (miss > TARGET_HIT) {
+      const short = (target.position.x - p.x) * parcel.heading.x + (target.position.z - p.z) * parcel.heading.z > 0;
+      return { message: `📦 Promašaj – ${Math.round(miss)} m od mete. ${short ? 'Baci malo kasnije' : 'Baci malo ranije'}!`, warn: true };
+    }
+    target.hit = true;
+    this.refreshVisuals();
+    const hits = this.targets.filter((t) => t.hit).length;
+    const goal = this.goal;
+    if (goal.kind === 'parcels' && hits === this.targets.length) return this.finish(timeStars(this.elapsed, goal.par), `Vrijeme: ${formatTime(this.elapsed)}`);
+    return { message: `${miss < TARGET_PERFECT ? '🎯 Savršeno, ravno u sredinu!' : '📦 Pogodak!'} ${target.island} (${hits}/${this.targets.length})` };
+  }
+
+  /** Where a parcel dropped now would land, by running its fall ahead of time. */
+  private parcelLanding(model: FlightModel): { x: number; z: number } {
+    const position = model.position.clone().setY(model.position.y - 1.5);
+    const velocity = model.velocity.clone();
+    const step = 0.1;
+    for (let age = 0; age < 120; age += step) {
+      stepParcel(position, velocity, age + step, step, model.wind);
+      if (position.y <= Math.max(this.terrain.heightAt(position.x, position.z), SEA_LEVEL)) break;
+    }
+    return { x: position.x, z: position.z };
+  }
+
+  /** A big painted target on each island, laid over the ground's bumps. */
+  private buildTargets(goal: Extract<Goal, { kind: 'parcels' }>): void {
+    const texture = targetTexture();
+    for (const name of goal.islands) {
+      const island = ISLANDS.find((i) => i.name === name)!;
+      // The flattest dry spot near the middle of the island.
+      let best = { x: island.x, z: island.z, score: Infinity };
+      for (let r = 0; r < island.radius * 0.7; r += 40) {
+        for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+          const x = island.x + Math.cos(a) * r;
+          const z = island.z + Math.sin(a) * r;
+          const h = this.terrain.heightAt(x, z);
+          if (h < 3) continue;
+          const bump = Math.max(...[-50, 50].flatMap((d) => [this.terrain.heightAt(x + d, z), this.terrain.heightAt(x, z + d)])) - Math.min(...[-50, 50].flatMap((d) => [this.terrain.heightAt(x + d, z), this.terrain.heightAt(x, z + d)]));
+          const score = bump + r * 0.01;
+          if (score < best.score) best = { x, z, score };
+        }
+      }
+      const geometry = new PlaneGeometry(TARGET_SIZE, TARGET_SIZE, 26, 26).rotateX(-Math.PI / 2);
+      const position = geometry.attributes.position;
+      for (let k = 0; k < position.count; k++) {
+        position.setY(k, Math.max(this.terrain.heightAt(best.x + position.getX(k), best.z + position.getZ(k)), SEA_LEVEL) + 0.6);
+      }
+      const paint = new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+      const mesh = new Mesh(geometry, paint);
+      mesh.position.set(best.x, 0, best.z);
+      this.group.add(mesh);
+      this.targets.push({ position: new Vector3(best.x, this.terrain.heightAt(best.x, best.z), best.z), island: name, hit: false, paint });
+    }
   }
 
   /** Where water dropped now would hit the ground (it keeps flying forwards as it falls, slowed by the air). */
@@ -300,6 +470,12 @@ export class MissionRun {
       }
       case 'splashdown':
         return { x: goal.x, z: goal.z };
+      case 'parcels': {
+        const left = this.targets.filter((t) => !t.hit);
+        if (!left.length) return null;
+        const best = left.reduce((a, b) => (a.position.distanceTo(from) < b.position.distanceTo(from) ? a : b));
+        return { x: best.position.x, z: best.position.z };
+      }
       case 'fire': {
         // The nearest fire still burning.
         let best: Fire | null = null;
@@ -441,6 +617,7 @@ export class MissionRun {
   /** Highlights the next ring and hides the ones already flown through; shows only fires still burning. */
   private refreshVisuals(): void {
     for (const fire of this.fires) fire.flames.visible = fire.strength > 0;
+    for (const target of this.targets) target.paint.opacity = target.hit ? 0.35 : 1;
     this.rings.forEach((ring, i) => {
       const material = ring.material as MeshStandardMaterial;
       ring.visible = i >= this.nextRing;
@@ -456,10 +633,40 @@ export class MissionRun {
   private placeBeacon(from: Vector3): void {
     let point = this.goal.kind === 'rings' || this.finished ? null : this.targetPoint(from);
     // Close to a fire its own smoke shows the way, and the beacon would hide the flames.
-    if (point && this.goal.kind === 'fire' && Math.hypot(point.x - from.x, point.z - from.z) < AIMING_RANGE) point = null;
+    const aiming = this.goal.kind === 'fire' || this.goal.kind === 'parcels';
+    if (point && aiming && Math.hypot(point.x - from.x, point.z - from.z) < AIMING_RANGE) point = null;
     this.beacon.visible = point !== null;
     if (!point) return;
     const ground = Math.max(this.terrain.heightAt(point.x, point.z), SEA_LEVEL);
     this.beacon.position.set(point.x, ground + BEACON_HEIGHT / 2, point.z);
   }
+}
+
+/** One step of a dropped parcel: free fall at first, then drifting down under its parachute with the wind. */
+function stepParcel(position: Vector3, velocity: Vector3, age: number, dt: number, wind: Vector3): void {
+  if (age < CHUTE_DELAY) {
+    velocity.y -= 9.81 * dt;
+  } else {
+    const brake = 1 - Math.exp(-2 * dt);
+    velocity.y += (-CHUTE_SINK - velocity.y) * brake;
+    const drift = 1 - Math.exp(-0.9 * dt);
+    velocity.x += (wind.x - velocity.x) * drift;
+    velocity.z += (wind.z - velocity.z) * drift;
+  }
+  position.addScaledVector(velocity, dt);
+}
+
+/** Red and white rings with a bull's-eye, fading out at the edge. */
+function targetTexture(): CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+  const rings = ['#e63946', '#ffffff', '#e63946', '#ffffff', '#e63946'];
+  rings.forEach((color, i) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(128, 128, 120 - i * 24, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  return new CanvasTexture(canvas);
 }

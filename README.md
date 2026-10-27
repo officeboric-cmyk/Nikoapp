@@ -8,8 +8,9 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
 - **🎓 škola letenja**: 5 lekcija korak po korak (polijetanje, zaokreti, gore i dolje, zakrilca, slijetanje),
   uz savjet što pritisnuti i zvjezdice
-- **12 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima,
-  gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧)
+- **13 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima,
+  gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧) i
+  paketi s padobranom na mete na tri otoka (`B` ili 📦; plavi krug pokazuje gdje bi pao)
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
 - pomoć za slijetanje: **PAPI svjetla** uz svaku pistu (2 bijela + 2 crvena = dobar prilaz, sva bijela =
   previsoko, sva crvena = prenisko) i plavi **krugovi** koji vode do piste (u arkadnom i normalnom načinu)
@@ -55,7 +56,7 @@ npm run preview  # pokreće gotovi build
 | `Razmak` | kočnica |
 | `V` | zakrilca: 0 → pola → puno (sporije letiš, lakše slijetaš) |
 | `G` | uvlačenje / izvlačenje kotača (mlažnjak i putnički avion) |
-| `B` | baci (u misiji s požarom: voda na vatru) |
+| `B` | baci (u misijama: voda na vatru ili paket s padobranom) |
 | `N` | ispočetka |
 | `P` | pauza |
 | `M` | zvuk uključen / isključen |

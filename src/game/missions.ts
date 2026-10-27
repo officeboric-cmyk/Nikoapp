@@ -14,7 +14,9 @@ export type Goal =
   /** Fly over each of these islands, in any order. */
   | { kind: 'tour'; islands: string[]; par: number }
   /** Put out `fires` forest fires on an island with water scooped from the sea (seaplane). */
-  | { kind: 'fire'; island: string; fires: number; par: number };
+  | { kind: 'fire'; island: string; fires: number; par: number }
+  /** Drop a parcel on a parachute onto a target on each of these islands. */
+  | { kind: 'parcels'; islands: string[]; par: number };
 
 export interface MissionDef {
   id: string;
@@ -139,6 +141,15 @@ export const MISSIONS: MissionDef[] = [
     aircraft: 'seaplane',
     start: 'Pješčani otok',
     goal: { kind: 'fire', island: 'Borov otok', fires: 3, par: 420 },
+  },
+  {
+    id: 'parcels',
+    emoji: '📦',
+    title: 'Paketi s padobranom',
+    brief: 'Baci paket (B / 📦) na metu na Otoku dupina, Kamenom i Gusarskom otoku. Plavi krug pokazuje gdje bi paket pao.',
+    aircraft: 'trainer',
+    start: 'Zeleni otok',
+    goal: { kind: 'parcels', islands: ['Otok dupina', 'Kameni otok', 'Gusarski otok'], par: 480 },
   },
 ];
 
