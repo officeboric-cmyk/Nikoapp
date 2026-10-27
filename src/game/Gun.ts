@@ -13,13 +13,32 @@ import {
 } from 'three';
 import { SEA_LEVEL, type FlightModel, type Ground } from '../physics/FlightModel';
 import type { Effects } from '../world/Effects';
-import type { Balloons } from './Balloons';
 
 /**
  * A fighter's gun: glowing tracer rounds that fly straight out of the nose (plus the plane's own
- * speed), fall a little, puff dust or spray where they strike the ground or the sea, and burst the
- * target balloons they hit. Other planes and houses are never hurt: the rounds pass them by.
+ * speed), fall a little, and strike what they meet: target balloons burst, other planes and houses
+ * are damaged and then brought down (see Shootable), the ground and the sea puff dust or spray.
  */
+
+/** What a round struck: `down` when that hit finished it off. */
+export type Strike = { kind: 'balloon' } | { kind: 'plane' | 'house' | 'parked'; down: boolean };
+
+/** Anything the gun can hit. */
+export interface Shootable {
+  /** Checks a round flying from `a` to `b` this step; if it hits something, deals with it and says what. */
+  strike(a: Vector3, b: Vector3): Strike | null;
+}
+
+/** True when the path from `a` to `b` passes within `radius` of `centre`. */
+export function passesNear(a: Vector3, b: Vector3, centre: Vector3, radius: number): boolean {
+  segment.subVectors(b, a);
+  const length2 = segment.lengthSq();
+  toCentre.subVectors(centre, a);
+  const t = length2 > 0 ? Math.min(1, Math.max(0, toCentre.dot(segment) / length2)) : 0;
+  return toCentre.addScaledVector(segment, -t).lengthSq() < radius * radius;
+}
+const segment = new Vector3();
+const toCentre = new Vector3();
 
 export const AMMO = 600; // rounds in a full gun
 const RATE = 18; // rounds per second while the trigger is held
@@ -82,11 +101,11 @@ export class Gun {
 
   /**
    * Fires while `trigger` is held, moves the rounds and checks what they strike. Returns how many
-   * rounds were fired this step (for the sound) and how many balloons burst.
+   * rounds were fired this step (for the sound) and what they struck.
    */
-  update(dt: number, model: FlightModel, trigger: boolean, ground: Ground, balloons: Balloons | null): { fired: number; burst: number } {
+  update(dt: number, model: FlightModel, trigger: boolean, ground: Ground, targets: (Shootable | null)[]): { fired: number; strikes: Strike[] } {
     let fired = 0;
-    let burst = 0;
+    const strikes: Strike[] = [];
     this.cooldown -= dt;
     if (trigger && this.ammo > 0 && !model.crashed) {
       while (this.cooldown <= 0 && this.ammo > 0) {
@@ -118,10 +137,11 @@ export class Gun {
       round.velocity.y -= GRAVITY * dt;
       round.position.addScaledVector(round.velocity, dt);
       round.age += dt;
-      const hit = balloons?.hitBy(from, round.position) ?? -1;
-      if (hit >= 0) {
-        balloons!.burst(hit);
-        burst++;
+      let strike: Strike | null = null;
+      for (const target of targets) if (target && (strike = target.strike(from, round.position))) break;
+      if (strike) {
+        strikes.push(strike);
+        this.effects.burst('spark', round.position, 4, new Vector3(0, 0, 0), 8);
         continue;
       }
       const floor = ground.heightAt(round.position.x, round.position.z);
@@ -142,7 +162,7 @@ export class Gun {
     });
     this.tracers.count = this.rounds.length;
     this.tracers.instanceMatrix.needsUpdate = true;
-    return { fired, burst };
+    return { fired, strikes };
   }
 
   dispose(scene: Scene): void {

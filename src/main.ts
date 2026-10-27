@@ -46,9 +46,10 @@ const camera = new PerspectiveCamera(65, window.innerWidth / window.innerHeight,
 const world = new World(scene);
 const graphics = new Graphics(document.getElementById('app')!, scene, camera, world);
 const terrain = world.terrain;
-const traffic = new Traffic(scene, terrain);
-const environment = new Environment(scene, world);
 const effects = new Effects(scene);
+world.effects = effects;
+const traffic = new Traffic(scene, terrain, effects);
+const environment = new Environment(scene, world);
 const landingAids = new LandingAids(scene, terrain.airports);
 // The light on smoke and spray at each time of day.
 const SMOKE_LIGHT: Record<TimeOfDay, number> = { day: 0xffffff, sunset: 0xffcfa8, night: 0x46557a };
@@ -625,8 +626,21 @@ function updateGun(dt: number, now: number): void {
     hud.flash('🎈 Nove mete su gore!', now, 2.5);
   }
   if (!gun) return;
-  const { fired, burst } = gun.update(dt, model, triggerHeld() && !model.onGround, terrain, mission instanceof MissionRun ? (mission.balloons ?? null) : practice);
+  const balloons = mission instanceof MissionRun ? (mission.balloons ?? null) : practice;
+  const { fired, strikes } = gun.update(dt, model, triggerHeld() && !model.onGround, terrain, [balloons, traffic, world]);
   if (fired) sound.gunshot();
+  const burst = strikes.filter((s) => s.kind === 'balloon').length;
+  for (const strike of strikes) {
+    if (strike.kind === 'balloon' || !strike.down) continue;
+    const messages = {
+      plane: '💥 Srušio si avion! Posada je iskočila — padobrani su se otvorili 🪂',
+      house: '🏚️ Srušeno! Za minutu-dvije bit će opet sagrađeno',
+      parked: '🔥 Pogodio si parkirani avion!',
+    };
+    hud.flash(messages[strike.kind], now, 3);
+    if (strike.kind === 'plane') radio.call('mayday', 'Mayday, mayday! Pogođeni smo, iskačemo!', now, 8);
+    else sound.crash();
+  }
   if (burst) {
     sound.pop();
     progress.updateStats((s) => (s.balloons += burst));
@@ -862,6 +876,8 @@ function frame(time: number): void {
   }
   input.endFrame();
   if (!paused) traffic.update(dt);
+  // A shot-down plane hitting the ground close by is heard.
+  for (const crash of traffic.crashes.splice(0)) if (crash.distanceTo(model.position) < 2500) sound.crash();
 
   const below = Math.max(terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
   const altitude = model.position.y - model.spec.gearHeight - below;

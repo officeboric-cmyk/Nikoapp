@@ -29,6 +29,8 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { AIRCRAFT } from '../aircraft/catalog';
 import { planeRadius, type Obstacle } from '../game/collisions';
+import { passesNear, type Shootable, type Strike } from '../game/Gun';
+import type { Effects } from './Effects';
 import { airportGlow, RUNWAY_WIDTH, type Airport } from './Airport';
 import { houseTemplate } from './buildings';
 import { Grass } from './Grass';
@@ -50,6 +52,18 @@ interface PlantCell {
   maxDistance: number;
 }
 
+/** Something on the ground the gun can bring down, and how to show it ruined and rebuilt. */
+interface Building {
+  kind: 'house' | 'parked';
+  centre: Vector3;
+  radius: number;
+  toughness: number;
+  health: number;
+  ruinedAt: number | null;
+  ruin(): void;
+  rebuild(): void;
+}
+
 /** A village: its middle, its island (index) and where its houses stand. */
 export interface Village {
   x: number;
@@ -68,11 +82,18 @@ const PLANT_CELL = 1500; // m: trees and bushes are drawn in squares this big
 const NEAR_PLANTS = 900; // m from a square within which its plants are drawn in full detail
 const BUSH_DISTANCE = 3000; // m beyond which scrub is too small to see
 const WALL_PIECE = 4; // m, dry-stone walls are laid in pieces this long
+// Shot down by a fighter's gun: hits each takes, how long ruins burn, and when they are built again.
+const HOUSE_HITS = 6;
+const TOWER_HITS = 10;
+const PARKED_HITS = 4;
+const BURNING = 12; // s
+const REBUILD = 90; // s
+const RUBBLE = 0.25; // share of the walls left standing
 const WALL_DISTANCE = 2500; // m beyond which the walls are too thin to see
 const LABEL_HIDE_NEAR = 700; // m, labels fade out when you get this close
 const LABEL_SHOW_FAR = 1600; // m, fully visible from here on
 
-export class World {
+export class World implements Shootable {
   readonly terrain = new Terrain();
   readonly sea: Sea;
   readonly sun: DirectionalLight;
@@ -86,7 +107,13 @@ export class World {
   /** Everything else that lights up at night with the windows: the terminals' glass, apron floodlights. */
   readonly nightGlow = airportGlow();
   /** The planes parked on the aprons, which can be bumped into while taxiing. */
-  readonly parked: Obstacle[] = [];
+  private readonly parkedPlanes: { object: Object3D; obstacle: Obstacle; building: Building }[] = [];
+  /** Houses, bell towers and parked planes the gun can bring down (they are rebuilt a while later). */
+  private readonly buildings: Building[] = [];
+  private readonly burning: { position: Vector3; until: number }[] = [];
+  private time = 0;
+  /** Set by the game: smoke, dust and flames when something is shot down. */
+  effects?: Effects;
   /** One village per island. */
   readonly villages: Village[];
   private readonly grass: Grass;
@@ -138,6 +165,7 @@ export class World {
    */
   update(focus: Vector3, camera: Vector3, dt: number): void {
     this.grass.update(camera, dt);
+    this.updateRuins(dt);
     // Trees near the camera in full detail, the rest simpler; far-off scrub not at all.
     for (const plant of this.plants) {
       const d = Math.hypot(Math.max(0, Math.abs(camera.x - plant.cx) - PLANT_CELL / 2), Math.max(0, Math.abs(camera.z - plant.cz) - PLANT_CELL / 2));
@@ -153,6 +181,49 @@ export class World {
       const distance = label.position.distanceTo(focus);
       label.material.opacity = MathUtils.smoothstep(distance, LABEL_HIDE_NEAR, LABEL_SHOW_FAR);
       label.visible = label.material.opacity > 0;
+    }
+  }
+
+  /** Parked planes that can be bumped into (not those shot down). */
+  get parked(): Obstacle[] {
+    return this.parkedPlanes.filter((p) => p.building.ruinedAt === null).map((p) => p.obstacle);
+  }
+
+  /** A round hitting a house, bell tower or parked plane: dust, and enough hits bring it down. */
+  strike(a: Vector3, b: Vector3): Strike | null {
+    const reach = a.distanceTo(b) + 30;
+    for (const building of this.buildings) {
+      if (building.ruinedAt !== null || building.centre.distanceTo(a) > reach + building.radius) continue;
+      if (!passesNear(a, b, building.centre, building.radius)) continue;
+      this.effects?.burst('dust', building.centre, 3, new Vector3(0, 2, 0), 3);
+      if (--building.health > 0) return { kind: building.kind, down: false };
+      building.ruinedAt = this.time;
+      building.ruin();
+      this.effects?.burst('dust', building.centre, 40, new Vector3(0, 4, 0), 10);
+      this.effects?.burst('crash', building.centre, 16, new Vector3(0, 3, 0), 6);
+      this.burning.push({ position: building.centre.clone(), until: this.time + BURNING });
+      return { kind: building.kind, down: true };
+    }
+    return null;
+  }
+
+  /** Ruins burn for a while and smoke, and after a while are built again. */
+  private updateRuins(dt: number): void {
+    this.time += dt;
+    for (let i = this.burning.length - 1; i >= 0; i--) {
+      const fire = this.burning[i];
+      if (this.time > fire.until) this.burning.splice(i, 1);
+      else if (Math.random() < dt * 12) {
+        this.effects?.emit('flame', fire.position, new Vector3(0, 2, 0), 2);
+        if (Math.random() < 0.5) this.effects?.emit('fireSmoke', fire.position, new Vector3(0, 3, 0), 2);
+      }
+    }
+    for (const building of this.buildings) {
+      if (building.ruinedAt !== null && this.time - building.ruinedAt > REBUILD) {
+        building.ruinedAt = null;
+        building.health = building.toughness;
+        building.rebuild();
+      }
     }
   }
 
@@ -368,7 +439,19 @@ export class World {
       plane.position.y += type.spec.gearHeight + 0.1;
       plane.rotation.y = airport.heading + Math.PI / 2;
       this.scene.add(plane);
-      this.parked.push({ position: plane.position.clone(), radius: planeRadius(type.spec.wingspan), velocity: new Vector3() });
+      const obstacle = { position: plane.position.clone(), radius: planeRadius(type.spec.wingspan), velocity: new Vector3() };
+      const building: Building = {
+        kind: 'parked',
+        centre: plane.position.clone(),
+        radius: obstacle.radius,
+        toughness: PARKED_HITS,
+        health: PARKED_HITS,
+        ruinedAt: null,
+        ruin: () => (plane.visible = false),
+        rebuild: () => (plane.visible = true),
+      };
+      this.parkedPlanes.push({ object: plane, obstacle, building });
+      this.buildings.push(building);
     }
   }
 
@@ -441,6 +524,27 @@ export class World {
         mesh.castShadow = mesh.receiveShadow = true;
         this.scene.add(mesh);
       }
+      // Each house can be shot down: its walls drop to a heap of rubble and the roof is gone.
+      matrices.forEach((matrix, i) => {
+        const base = new Vector3().setFromMatrixPosition(matrix);
+        const rubble = matrix.clone().multiply(new Matrix4().makeScale(1, RUBBLE, 1));
+        const hidden = matrix.clone().multiply(new Matrix4().makeScale(0, 0, 0));
+        const set = (walls: Matrix4, roof: Matrix4) => {
+          wallMesh.setMatrixAt(i, walls);
+          roofMesh.setMatrixAt(i, roof);
+          wallMesh.instanceMatrix.needsUpdate = roofMesh.instanceMatrix.needsUpdate = true;
+        };
+        this.buildings.push({
+          kind: 'house',
+          centre: base.clone().setY(base.y + template.height * 0.6),
+          radius: Math.max(template.width, template.depth) * 0.6 + 1.5, // a little help with aiming
+          toughness: HOUSE_HITS,
+          health: HOUSE_HITS,
+          ruinedAt: null,
+          ruin: () => set(rubble, hidden),
+          rebuild: () => set(matrix, matrix),
+        });
+      });
     });
     return villages;
   }
@@ -511,6 +615,16 @@ export class World {
       tower.traverse((o) => (o.castShadow = o.receiveShadow = true));
       village.houses.push({ x, z });
       this.scene.add(tower);
+      this.buildings.push({
+        kind: 'house',
+        centre: new Vector3(x, y + 11, z),
+        radius: 6,
+        toughness: TOWER_HITS,
+        health: TOWER_HITS,
+        ruinedAt: null,
+        ruin: () => (tower.scale.y = RUBBLE),
+        rebuild: () => (tower.scale.y = 1),
+      });
       return;
     }
   }

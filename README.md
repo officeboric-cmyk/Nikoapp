@@ -9,7 +9,9 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - **5 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!), Putnički avion i **Lovac** – vojni avion
   brži od zvuka (do ~1300 km/h s dodatnim izgaranjem, pa prasak i oblak pare kad probije zvučni zid), s
   **mitraljezom**: tragajući meci, nišan ⊕, 600 metaka koji se pune na aerodromu. Gađaju se baloni-mete
-  (u slobodnom letu oko otoka s kojeg kreneš); drugi avioni i kuće ne mogu se pogoditi
+  (u slobodnom letu oko otoka s kojeg kreneš), a mogu se srušiti i drugi avioni (posada iskoči
+  padobranima, a nakon minute poleti novi avion) te kuće, zvonici i parkirani avioni (gore, pa se nakon
+  minute i pol opet sagrade)
 - 🤖 **autopilot** (`T` ili 🤖): drži visinu, smjer i brzinu (sam vodi gas), u misijama vodi do cilja i
   penje se preko brda na putu; isključi se čim pomakneš palicu ili gas
 - **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
@@ -143,6 +145,7 @@ src/
   game/FlightLog.ts       – rekordi leta i prepoznavanje loopinga i valjka
   game/Autopilot.ts       – autopilot: visina, smjer, brzina, do cilja, preko brda
   game/Gun.ts             – mitraljez lovca: meci, pogoci, udari u tlo i more
+  world/Parachutes.ts     – posada oborenih aviona na padobranima
   game/Balloons.ts        – baloni-mete
   world/islands.ts        – popis otoka i aerodroma (lako dodati nove)
   world/Terrain.ts        – visinske mape otoka, "koliko je visoko tlo ovdje?"

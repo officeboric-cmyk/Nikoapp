@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SEA_LEVEL, type Ground } from '../physics/FlightModel';
 import type { Effects } from '../world/Effects';
 import { mulberry32 } from '../world/noise';
+import { passesNear, type Shootable, type Strike } from './Gun';
 
 /**
  * Target balloons for gunnery practice: big, bright balloons on long tethers, bobbing in the
@@ -24,10 +25,8 @@ const m = new Matrix4();
 const noTurn = new Quaternion();
 const one = new Vector3(1, 1, 1);
 const gone = new Vector3(0, 0, 0);
-const seg = new Vector3();
-const toCentre = new Vector3();
 
-export class Balloons {
+export class Balloons implements Shootable {
   private readonly balloons: Balloon[] = [];
   private readonly mesh: InstancedMesh;
   private time = 0;
@@ -101,19 +100,12 @@ export class Balloons {
     this.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  /** The balloon a round flying from `a` to `b` this step passes close enough to burst, or -1. */
-  hitBy(a: Vector3, b: Vector3): number {
-    seg.subVectors(b, a);
-    const length2 = seg.lengthSq();
-    for (let i = 0; i < this.balloons.length; i++) {
-      const balloon = this.balloons[i];
-      if (!balloon.alive) continue;
-      // Closest point of the round's path this step to the balloon's middle.
-      toCentre.subVectors(balloon.position, a);
-      const t = length2 > 0 ? Math.min(1, Math.max(0, toCentre.dot(seg) / length2)) : 0;
-      if (toCentre.addScaledVector(seg, -t).lengthSq() < HIT_RADIUS * HIT_RADIUS) return i;
-    }
-    return -1;
+  /** A round passing close enough bursts a balloon. */
+  strike(a: Vector3, b: Vector3): Strike | null {
+    const i = this.balloons.findIndex((balloon) => balloon.alive && passesNear(a, b, balloon.position, HIT_RADIUS));
+    if (i < 0) return null;
+    this.burst(i);
+    return { kind: 'balloon' };
   }
 
   burst(i: number): void {
