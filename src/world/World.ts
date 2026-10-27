@@ -28,6 +28,7 @@ import { RUNWAY_WIDTH } from './Airport';
 import { MAP_HALF_SIZE, type IslandDef } from './islands';
 import { lightMaterial, lightPoints } from './lights';
 import { mulberry32, noise2 } from './noise';
+import { Sea } from './Sea';
 import { Terrain } from './Terrain';
 
 /** Sky, light, the islands with their trees and villages, clouds and island name labels. */
@@ -40,6 +41,7 @@ const LABEL_SHOW_FAR = 1600; // m, fully visible from here on
 
 export class World {
   readonly terrain = new Terrain();
+  readonly sea: Sea;
   readonly sun: DirectionalLight;
   readonly sky: HemisphereLight;
   /** Where the sun sits relative to the plane; the time of day moves it. */
@@ -71,6 +73,8 @@ export class World {
     scene.add(this.sun, this.sun.target);
 
     scene.add(this.terrain.object);
+    this.sea = new Sea(this.terrain);
+    scene.add(this.sea.mesh);
     const rand = mulberry32(42);
     this.addTrees(rand);
     this.addHouses(rand);
@@ -81,9 +85,10 @@ export class World {
     for (const object of this.nightOnly) object.visible = false;
   }
 
-  /** Keeps the shadow-casting sun centred on the plane, fades labels that are too close and turns the lighthouse beams. */
+  /** Keeps the shadow-casting sun centred on the plane, fades labels that are too close, turns the lighthouse beams and moves the waves. */
   update(focus: Vector3, dt: number): void {
     for (const beam of this.beams) beam.rotation.y += dt * 0.8;
+    this.sea.update(dt);
     this.sun.target.position.copy(focus);
     this.sun.position.copy(focus).add(this.sunOffset);
     for (const label of this.labels) {

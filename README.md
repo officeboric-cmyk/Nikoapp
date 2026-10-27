@@ -94,6 +94,8 @@ src/
   world/Airport.ts        – pista, oznake, toranj, hangar, vjetrokaz, izravnavanje tla
   world/World.ts          – svjetlo, šume, sela, svjetionik, oblaci, imena otoka, noćna svjetla
   world/Environment.ts    – doba dana i vrijeme: nebo, sunce/mjesec, zvijezde, kiša, vjetar
+  world/Sky.ts            – nebo (prijelaz boja, sjaj i disk sunca ili mjeseca)
+  world/Sea.ts            – more: valići, odraz neba, odsjaj sunca, plićaci i pjena uz obalu
   world/Traffic.ts        – drugi avioni koji lete između aerodroma
   world/lights.ts         – svjetleće točke (pista, avioni, svjetionik)
   camera/CameraRig.ts     – 3 kamere (iza, kokpit/FPV, sa strane), nikad u brdu

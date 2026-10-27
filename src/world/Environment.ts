@@ -13,6 +13,7 @@ import {
   Vector3,
 } from 'three';
 import { NAV_LIGHTS } from './lights';
+import { SkyDome, skyUniforms } from './Sky';
 import type { World } from './World';
 
 export type TimeOfDay = 'day' | 'sunset' | 'night';
@@ -32,7 +33,12 @@ export const WEATHERS: { id: Weather; label: string }[] = [
 
 /** How the sky and light look at a time of day. */
 interface Look {
-  sky: number;
+  skyTop: number; // overhead
+  sky: number; // at the horizon, also the fog
+  sunGlow: number; // haze around the sun (or moon)
+  sunGlowStrength: number;
+  sunDisc: number;
+  sunDiscStrength: number;
   sunColor: number;
   sunIntensity: number;
   sunOffset: [number, number, number]; // sun direction (relative to the plane): low = long shadows
@@ -47,7 +53,12 @@ interface Look {
 
 const LOOKS: Record<TimeOfDay, Look> = {
   day: {
-    sky: 0x87ceeb,
+    skyTop: 0x2f80d8,
+    sky: 0x9dd8f0,
+    sunGlow: 0xfff4d6,
+    sunGlowStrength: 0.5,
+    sunDisc: 0xfffbe8,
+    sunDiscStrength: 1.6,
     sunColor: 0xffffff,
     sunIntensity: 2.2,
     sunOffset: [80, 150, 60],
@@ -60,7 +71,12 @@ const LOOKS: Record<TimeOfDay, Look> = {
     lightsOn: false,
   },
   sunset: {
+    skyTop: 0x4a5fa8,
     sky: 0xf4a261,
+    sunGlow: 0xff8a3d,
+    sunGlowStrength: 1,
+    sunDisc: 0xffd27a,
+    sunDiscStrength: 1.6,
     sunColor: 0xffb070,
     sunIntensity: 2,
     sunOffset: [180, 40, 40],
@@ -74,7 +90,12 @@ const LOOKS: Record<TimeOfDay, Look> = {
     lightsOn: true,
   },
   night: {
-    sky: 0x0b1d3a,
+    skyTop: 0x030914,
+    sky: 0x0e2245,
+    sunGlow: 0x6f86c0, // the moon's halo
+    sunGlowStrength: 0.25,
+    sunDisc: 0xf1f4ff,
+    sunDiscStrength: 1.1,
     sunColor: 0x9db4ff, // moonlight
     sunIntensity: 0.45,
     sunOffset: [-60, 140, -80],
@@ -110,6 +131,7 @@ export class Environment {
   weather: Weather = 'clear';
   readonly wind = new Vector3();
   turbulence = 0;
+  private readonly sky = new SkyDome();
   private readonly stars: Points;
   private readonly rain: LineSegments;
   private readonly rainPositions: Float32Array;
@@ -148,7 +170,7 @@ export class Environment {
     this.rain = new LineSegments(rainGeometry, new LineBasicMaterial({ color: 0xbfd7ea, transparent: true, opacity: 0.55 }));
     this.rain.frustumCulled = false;
 
-    scene.add(this.stars, this.rain);
+    scene.add(this.sky.mesh, this.stars, this.rain);
     this.set('day', 'clear');
   }
 
@@ -158,9 +180,17 @@ export class Environment {
     const look = LOOKS[time];
     const w = WEATHER[weather];
 
-    const sky = new Color(look.sky).lerp(GREY, w.grey * (time === 'night' ? 0.3 : 1));
+    const grey = w.grey * (time === 'night' ? 0.3 : 1);
+    const sky = new Color(look.sky).lerp(GREY, grey);
     this.scene.background = sky;
     this.scene.fog = new Fog(sky, FOG.near * w.fogScale, FOG.far * w.fogScale);
+    skyUniforms.skyHorizon.value.copy(sky);
+    skyUniforms.skyTop.value.setHex(look.skyTop).lerp(GREY, Math.min(grey * 1.7, 1)); // overcast all over
+    skyUniforms.sunDirection.value.set(...look.sunOffset).normalize();
+    // Clouds hide the disc in the rain and soften the glow.
+    skyUniforms.sunGlow.value.setHex(look.sunGlow).multiplyScalar(look.sunGlowStrength * (1 - w.grey));
+    skyUniforms.sunDisc.value.setHex(look.sunDisc).multiplyScalar(weather === 'rain' ? 0 : look.sunDiscStrength);
+    skyUniforms.sunSize.value = time === 'night' ? 0.03 : 0.035;
 
     const { sun, sky: skyLight, cloudMaterial, windowsMaterial, nightOnly, sunOffset } = this.world;
     sun.color.setHex(look.sunColor);
@@ -188,6 +218,7 @@ export class Environment {
   update(dt: number, cameraPosition: Vector3): void {
     this.clock += dt;
     this.stars.position.copy(cameraPosition);
+    this.sky.mesh.position.copy(cameraPosition);
 
     // Strobes flash briefly once per period.
     NAV_LIGHTS.strobe.opacity = this.clock % STROBE_PERIOD < 0.12 ? 1 : 0;

@@ -142,7 +142,7 @@ class IslandTerrain {
   }
 }
 
-/** All islands and the sea around them. Answers "how high is the ground here?" for the physics. */
+/** All islands (the sea is in Sea.ts). Answers "how high is the ground here?" for the physics. */
 export class Terrain implements Ground {
   readonly airports: Airport[] = [];
   readonly object = new Group();
@@ -157,15 +157,6 @@ export class Terrain implements Ground {
       this.object.add(island.buildMesh());
       if (airport) this.object.add(airport.build());
     });
-
-    // Split into tiles so no triangle is huge; giant triangles cause depth glitches on some GPUs.
-    const sea = new Mesh(
-      new PlaneGeometry(90000, 90000, 90, 90).rotateX(-Math.PI / 2),
-      new MeshStandardMaterial({ color: 0x1f8acb, roughness: 0.35, metalness: 0.1 }),
-    );
-    sea.position.y = SEA_LEVEL;
-    sea.receiveShadow = true;
-    this.object.add(sea);
   }
 
   /** Ground height in metres; below SEA_LEVEL means open water. */
