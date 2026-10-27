@@ -87,7 +87,8 @@ function startMission(def: MissionDef): void {
     airport: terrain.airports.find((a) => a.name === def.start)!,
   };
   begin(picked);
-  mission = new MissionRun(def, scene, terrain, picked.airport);
+  mission = new MissionRun(def, scene, terrain, picked.airport, effects);
+  dropButton.classList.toggle('hidden', !mission.canDrop);
   hud.flash(`${def.emoji} ${def.brief}`, timer.getElapsed(), 5);
 }
 
@@ -113,6 +114,7 @@ function setEnvironment(time: TimeOfDay, weather: Weather): void {
 function endMission(): void {
   mission?.dispose();
   mission = null;
+  dropButton.classList.add('hidden');
   missionDone.classList.add('hidden');
 }
 
@@ -298,6 +300,17 @@ function toggleGear(): void {
   hud.flash(messages[result], timer.getElapsed(), 2);
   if (result === 'up' || result === 'down') sound.gear();
 }
+const dropButton = document.getElementById('drop-btn')!;
+dropButton.addEventListener('click', () => {
+  dropFocus();
+  if (started && !paused && !menu.visible) dropLoad(timer.getElapsed());
+});
+
+/** Lets go of what the mission carries (water on a fire). */
+function dropLoad(now: number): void {
+  if (mission && !model.crashed) applyMission(mission.drop(model), now);
+}
+
 document.getElementById('pause-btn')!.addEventListener('click', () => {
   dropFocus();
   if (started && !menu.visible) setPaused(!paused);
@@ -432,6 +445,7 @@ function frame(time: number): void {
     if (input.wasTapped('KeyC')) cycleCamera();
     if (input.wasTapped('KeyG') && !paused) toggleGear();
     if (input.wasTapped('KeyV') && !paused) cycleFlaps();
+    if (input.wasTapped('KeyB') && !paused) dropLoad(now);
     if (input.wasTapped('KeyP')) setPaused(!paused);
     if (input.wasTapped('KeyN')) respawn();
     if (input.wasTapped('KeyM')) hud.flash(sound.toggleMute() ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);

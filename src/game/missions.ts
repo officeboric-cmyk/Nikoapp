@@ -12,7 +12,9 @@ export type Goal =
   /** Land on the sea close to a spot and stop there (seaplane only). */
   | { kind: 'splashdown'; x: number; z: number; label: string; boat: boolean; par: number }
   /** Fly over each of these islands, in any order. */
-  | { kind: 'tour'; islands: string[]; par: number };
+  | { kind: 'tour'; islands: string[]; par: number }
+  /** Put out `fires` forest fires on an island with water scooped from the sea (seaplane). */
+  | { kind: 'fire'; island: string; fires: number; par: number };
 
 export interface MissionDef {
   id: string;
@@ -128,6 +130,15 @@ export const MISSIONS: MissionDef[] = [
     airline: 'otok',
     start: 'Dugi otok',
     goal: { kind: 'land', at: 'Zeleni otok' },
+  },
+  {
+    id: 'fire-pine',
+    emoji: '🔥',
+    title: 'Požar na Borovom otoku',
+    brief: 'Gori šuma na Borovom otoku! Kliži hidroavionom po moru da napuniš vodu, pa je baci na vatru (B / 💧) – nisko, ispod 150 m.',
+    aircraft: 'seaplane',
+    start: 'Pješčani otok',
+    goal: { kind: 'fire', island: 'Borov otok', fires: 3, par: 420 },
   },
 ];
 

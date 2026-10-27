@@ -6,7 +6,8 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - **6 aerodroma** s pistom (i brojevima na njoj), tornjem, hangarom, terminalom, parkiranim avionima i vjetrokazom
 - **4 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!) i Putnički avion
 - **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
-- **11 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima
+- **12 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima,
+  gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧)
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
 - **dan, zalazak i noć** (sunce, mjesec, svjetla piste, svjetionik, zvijezde) i **vrijeme**: vedro, vjetar, kiša
 - more s valićima, odrazom neba, plićacima i pjenom; palme na plažama
@@ -45,6 +46,7 @@ npm run preview  # pokreće gotovi build
 | `Razmak` | kočnica |
 | `V` | zakrilca: 0 → pola → puno (sporije letiš, lakše slijetaš) |
 | `G` | uvlačenje / izvlačenje kotača (mlažnjak i putnički avion) |
+| `B` | baci (u misiji s požarom: voda na vatru) |
 | `N` | ispočetka |
 | `P` | pauza |
 | `M` | zvuk uključen / isključen |
@@ -70,6 +72,7 @@ izvući kotače, avion klizne po trbuhu i vrati se na početak.
 | `X` / `◻` | kotači |
 | `Y` / `△` | kamera |
 | `Start` / `Back` | pauza / izbornik |
+| križ dolje | baci (misije) |
 
 ### Na mobitelu i tabletu
 

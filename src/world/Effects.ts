@@ -15,11 +15,12 @@ import type { Terrain } from './Terrain';
 
 /**
  * Puffs and sprays: tyre smoke when the wheels touch down, dust rolling on grass, spray on the
- * water, contrails behind jets up high and a cloud of smoke after a crash. All are soft round
+ * water, contrails behind jets up high, a cloud of smoke after a crash, and for the fire
+ * mission flames, a column of smoke and the water dropped on them. All are soft round
  * particles in one pool, drawn in a single call.
  */
 
-export type EffectKind = 'smoke' | 'dust' | 'spray' | 'contrail' | 'crash';
+export type EffectKind = 'smoke' | 'dust' | 'spray' | 'contrail' | 'crash' | 'flame' | 'fireSmoke' | 'water';
 
 interface Look {
   color: number;
@@ -28,6 +29,7 @@ interface Look {
   alpha: number;
   drag: number; // how quickly it stops moving (per second)
   lift: number; // m/s² upwards (negative falls)
+  glow?: boolean; // gives its own light (flames): as bright at night as by day
 }
 
 const LOOKS: Record<EffectKind, Look> = {
@@ -36,6 +38,9 @@ const LOOKS: Record<EffectKind, Look> = {
   spray: { color: 0xffffff, size: [0.6, 2.8], life: 0.9, alpha: 0.75, drag: 0.8, lift: -9 },
   contrail: { color: 0xffffff, size: [3, 10], life: 7, alpha: 0.4, drag: 0.4, lift: 0 },
   crash: { color: 0x6b6b6b, size: [3, 16], life: 3.5, alpha: 0.75, drag: 1.2, lift: 2.5 },
+  flame: { color: 0xff7a1a, size: [6, 1.5], life: 1.1, alpha: 0.9, drag: 1.5, lift: 7, glow: true },
+  fireSmoke: { color: 0x4a4744, size: [10, 55], life: 14, alpha: 0.6, drag: 0.3, lift: 2.5 },
+  water: { color: 0xe3f4ff, size: [2, 10], life: 3, alpha: 0.6, drag: 0.25, lift: -9.81 },
 };
 
 const COLORS = Object.fromEntries(Object.entries(LOOKS).map(([kind, look]) => [kind, new Color(look.color)])) as Record<EffectKind, Color>;
@@ -58,6 +63,7 @@ export class Effects {
   private readonly size = new Float32Array(MAX);
   private readonly alpha = new Float32Array(MAX);
   private readonly color = new Float32Array(MAX * 3);
+  private readonly glow = new Float32Array(MAX);
   private readonly material: ShaderMaterial;
   private next = 0;
   private contrailGap = 0;
@@ -69,19 +75,23 @@ export class Effects {
     geometry.setAttribute('size', new BufferAttribute(this.size, 1));
     geometry.setAttribute('alpha', new BufferAttribute(this.alpha, 1));
     geometry.setAttribute('color', new BufferAttribute(this.color, 3));
+    geometry.setAttribute('glow', new BufferAttribute(this.glow, 1));
     this.material = new ShaderMaterial({
       uniforms: UniformsUtils.merge([UniformsLib.fog, { light: { value: new Color(0xffffff) }, viewportHalfHeight: { value: 400 } }]),
       vertexShader: /* glsl */ `
         attribute float size;
         attribute float alpha;
         attribute vec3 color;
+        attribute float glow;
         uniform float viewportHalfHeight;
         varying float vAlpha;
         varying vec3 vColor;
+        varying float vGlow;
         #include <fog_pars_vertex>
         void main() {
           vAlpha = alpha;
           vColor = color;
+          vGlow = glow;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mvPosition;
           gl_PointSize = size * projectionMatrix[1][1] * viewportHalfHeight / max(-mvPosition.z, 0.1);
@@ -92,11 +102,13 @@ export class Effects {
         uniform vec3 light;
         varying float vAlpha;
         varying vec3 vColor;
+        varying float vGlow;
         #include <fog_pars_fragment>
         void main() {
           float r = length(gl_PointCoord - 0.5) * 2.0;
           if (r > 1.0) discard;
-          gl_FragColor = vec4(vColor * light, vAlpha * (1.0 - r * r));
+          // Glowing particles (flames) shine brighter than white, so the bloom picks them up.
+          gl_FragColor = vec4(vColor * mix(light, vec3(1.6), vGlow), vAlpha * (1.0 - r * r));
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
           #include <fog_fragment>
@@ -148,6 +160,7 @@ export class Effects {
     this.age[i] = 0;
     this.kind[i] = kind;
     COLORS[kind].toArray(this.color, i * 3);
+    this.glow[i] = LOOKS[kind].glow ? 1 : 0;
   }
 
   burst(kind: EffectKind, at: Vector3, count: number, velocity: Vector3, spread: number): void {
@@ -198,7 +211,7 @@ export class Effects {
       this.alpha[i] = look.alpha * (1 - t) * Math.min(1, age * 10); // fades in quickly, out slowly
     }
     const attributes = this.points.geometry.attributes;
-    for (const name of ['position', 'size', 'alpha', 'color']) (attributes[name] as BufferAttribute).needsUpdate = true;
+    for (const name of ['position', 'size', 'alpha', 'color', 'glow']) (attributes[name] as BufferAttribute).needsUpdate = true;
   }
 
   private emitFromPlane(dt: number, model: FlightModel, terrain: Terrain): void {

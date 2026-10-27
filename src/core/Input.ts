@@ -16,9 +16,10 @@ const PAD_DEADZONE = 0.12;
 
 /**
  * Gamepad buttons (standard layout, e.g. Xbox / PlayStation) act like these keys, so the game
- * only has to listen for keys: X / ◻ wheels, Y / △ camera, B / ○ flaps, Start pause, Back menu.
+ * only has to listen for keys: X / ◻ wheels, Y / △ camera, B / ○ flaps, d-pad down drop (missions),
+ * Start pause, Back menu.
  */
-const PAD_BUTTONS: Record<number, string> = { 1: 'KeyV', 2: 'KeyG', 3: 'KeyC', 8: 'Escape', 9: 'KeyP' };
+const PAD_BUTTONS: Record<number, string> = { 1: 'KeyV', 2: 'KeyG', 3: 'KeyC', 8: 'Escape', 9: 'KeyP', 13: 'KeyB' };
 const PAD_BRAKE = 0; // A / ✕
 const PAD_GAS_DOWN = 6; // left trigger
 const PAD_GAS_UP = 7; // right trigger
