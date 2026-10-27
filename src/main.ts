@@ -16,7 +16,7 @@ import { MissionRun, type MissionResult, type MissionUpdate } from './game/Missi
 import { LESSONS, LessonRun, type LessonDef, type Words } from './game/lessons';
 import { MISSIONS, type MissionDef } from './game/missions';
 import { Progress } from './game/Progress';
-import { FlightModel, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
+import { FlightModel, FUEL_LOW, FUEL_VERY_LOW, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
 import { Cockpit } from './ui/Cockpit';
 import { HUD } from './ui/HUD';
 import { Instruments, type Target } from './ui/Instruments';
@@ -56,6 +56,11 @@ radio.muted = sound.isMuted;
 /** Calls from the tower waiting to be made a little later (so they don't cover the start message). */
 const pendingCalls: { at: number; kind: string; text: string }[] = [];
 const flightLog = new FlightLog();
+const REFUEL_RANGE = 900; // m from an airport's middle where a stopped plane is filled up
+const REFUEL_BELOW = 0.98; // a tank fuller than this isn't topped up
+const STRANDED_DELAY = 4; // s before a plane out of fuel away from any airport goes back to the start
+let fuelWarned = 0; // 0 = no warning yet, 1 = "little fuel" given, 2 = "nearly empty" given
+let refuelling = false; // standing at an airport filling up (until full or moving off)
 const SAVE_EVERY = 10; // s between saves of the records while flying
 let nextSave = 0;
 const minimap = new Minimap(terrain);
@@ -287,6 +292,8 @@ function respawn(): void {
   rig.snap(model);
   touch.reset();
   flightLog.reset();
+  fuelWarned = 0;
+  refuelling = false;
   respawnAt = Infinity;
   accumulator = 0;
 }
@@ -443,12 +450,53 @@ function handleEvents(events: FlightEvent[], now: number): void {
       respawnAt = now + RESPAWN_DELAY;
       effects.crash(model);
       sound.crash();
+    } else if (event === 'engine-out') {
+      const { airport } = terrain.nearestAirport(model.position.x, model.position.z);
+      if (!model.onGround) {
+        hud.flash(`⛽ Nema goriva, motor je stao! Kliži prema pisti (${airport.name}) i sleti`, now, 5, true);
+        radio.call('engine-out', `Ostali ste bez goriva. Klizite prema aerodromu ${airport.name}.`, now);
+      }
     } else if (event === 'splash') {
       hud.flash(`Pljus! 🌊 Ovaj avion ne zna plivati. ${againText()}`, now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
       effects.splash(model);
       sound.splash();
     }
+  }
+}
+
+/**
+ * Fuel (not in arcade): warnings as the tank empties, filling up standing still at an airport,
+ * and back to the start when stuck without fuel far from one.
+ */
+function updateFuel(dt: number, now: number): void {
+  if (model.realism === 'arcade' || model.crashed) {
+    refuelling = false;
+    return;
+  }
+  const { airport, distance } = terrain.nearestAirport(model.position.x, model.position.z);
+  const level = model.fuel < FUEL_VERY_LOW ? 2 : model.fuel < FUEL_LOW ? 1 : 0;
+  if (level < fuelWarned) fuelWarned = level; // filled up again
+  if (level > fuelWarned && model.fuel > 0) {
+    fuelWarned = level;
+    if (level === 1) {
+      hud.flash(`⛽ Malo goriva! Sleti na aerodrom i stani da natankaš (najbliži: ${airport.name})`, now, 4.5, true);
+      radio.call('fuel', `Malo vam je goriva. Najbliži aerodrom je ${airport.name}.`, now, 5);
+    } else {
+      hud.flash('⛽ Gorivo je skoro potrošeno! Sleti što prije', now, 4, true);
+      radio.call('fuel', 'Gorivo pri kraju, sletite odmah!', now, 5);
+    }
+  }
+  const stopped = model.onGround && model.speed < 1 && !model.bellyLanded;
+  // Starts once a little fuel is used (the idle engine sips some while standing), then fills right up.
+  refuelling = stopped && distance < REFUEL_RANGE && (refuelling || model.fuel < REFUEL_BELOW);
+  if (refuelling && model.refuel(dt)) {
+    refuelling = false;
+    hud.flash('⛽ Pun rezervoar! Možeš opet letjeti', now, 3);
+    sound.reward();
+  } else if (stopped && !model.engineRunning && distance >= REFUEL_RANGE && respawnAt === Infinity) {
+    hud.flash('⛽ Bez goriva, a aerodrom je daleko. Vraćamo te na početak…', now, STRANDED_DELAY, true);
+    respawnAt = now + STRANDED_DELAY;
   }
 }
 
@@ -536,6 +584,7 @@ function updateHint(now: number, altitude: number): void {
     radio.call('gear', 'Provjerite kotače!', now);
     return hud.hint(say('🛞 Izvuci kotače (G)!', '🛞 Izvuci kotače (gumb 🛞)!'), now, true);
   }
+  if (refuelling) return hud.hint(`⛽ Tankanje… ${Math.floor(model.fuel * 100)} %`, now);
   if (mission instanceof LessonRun) {
     const words: Words = { touch: touch.enabled, noseUp: say(upKeys, upStick), noseDown: say(downKeys, downStick) };
     return hud.hint(mission.tip(words), now);
@@ -597,6 +646,7 @@ function frame(time: number): void {
       applyMission(mission.update(dt, model, model.position.y - model.spec.gearHeight - ground), now);
     } else if (mission && !model.crashed) applyMission(mission.update(dt, model), now);
     checkDiscovery(now);
+    updateFuel(dt, now);
     const trick = flightLog.update(dt, model, progress.stats);
     if (trick) {
       progress.updateStats((s) => (trick === 'loop' ? s.loops++ : s.rolls++));

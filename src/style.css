@@ -106,6 +106,14 @@ body {
   color: var(--accent);
 }
 
+#hud-fuel-gauge.low .value {
+  color: var(--accent);
+}
+
+#hud-fuel-gauge.empty .value {
+  color: var(--warn);
+}
+
 #hud-gear-gauge.up .value {
   opacity: 0.45;
 }

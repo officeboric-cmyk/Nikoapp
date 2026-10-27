@@ -47,7 +47,7 @@ export class Aircraft {
     gear.visible = flight.gear > 0.05;
     if (flight.crashed) return;
     this.updateSurfaces(flight, dt);
-    spinPropellers(this.model.propellers, 4 + flight.throttle * 40, dt);
+    spinPropellers(this.model.propellers, 4 + flight.power * 40, dt); // without fuel it only windmills
   }
 
   private updateSurfaces(flight: FlightModel, dt: number): void {

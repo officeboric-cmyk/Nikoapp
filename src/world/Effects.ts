@@ -238,7 +238,7 @@ export class Effects {
 
     // Contrails: a puff every few metres from each engine.
     const high = model.position.y - SEA_LEVEL > CONTRAIL_HEIGHT;
-    if (this.exhausts.length && high && !model.onGround) {
+    if (this.exhausts.length && high && !model.onGround && model.engineRunning) {
       this.contrailGap += model.speed * dt;
       while (this.contrailGap >= CONTRAIL_SPACING) {
         this.contrailGap -= CONTRAIL_SPACING;

@@ -1,4 +1,4 @@
-import type { FlightModel } from '../physics/FlightModel';
+import { FUEL_LOW, FUEL_VERY_LOW, type FlightModel } from '../physics/FlightModel';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -20,6 +20,8 @@ export class HUD {
   private readonly gearIcon = el('hud-gear');
   private readonly flapsGauge = el('hud-flaps-gauge');
   private readonly flapsText = el('hud-flaps-text');
+  private readonly fuelGauge = el('hud-fuel-gauge');
+  private readonly fuelText = el('hud-fuel');
 
   private flashText = '';
   private flashWarn = false;
@@ -32,6 +34,7 @@ export class HUD {
     this.throttle.style.width = `${Math.round(model.throttle * 100)}%`;
     this.updateGear(model);
     this.updateFlaps(model);
+    this.updateFuel(model);
     if (now < this.flashUntil) this.show(this.flashText, this.flashWarn);
   }
 
@@ -58,6 +61,15 @@ export class HUD {
     for (const name of ['down', 'up', 'moving']) this.gearGauge.classList.toggle(name, name === state);
     const icon = state === 'down' ? '⬇' : state === 'up' ? '⬆' : '↕';
     if (this.gearIcon.textContent !== icon) this.gearIcon.textContent = icon;
+  }
+
+  /** The tank, in percent (not in arcade, where it never runs dry); orange when low, red when nearly empty. */
+  private updateFuel(model: FlightModel): void {
+    this.fuelGauge.classList.toggle('hidden', model.realism === 'arcade');
+    this.fuelGauge.classList.toggle('low', model.fuel < FUEL_LOW);
+    this.fuelGauge.classList.toggle('empty', model.fuel < FUEL_VERY_LOW);
+    const text = String(Math.ceil(model.fuel * 100));
+    if (this.fuelText.textContent !== text) this.fuelText.textContent = text;
   }
 
   /** Shown only while the flaps are out, with how far. */

@@ -12,6 +12,8 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
   gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧) i
   paketi s padobranom na mete na tri otoka (`B` ili 📦; plavi krug pokazuje gdje bi pao)
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
+- ⛽ **gorivo** (u normalnom i realističnom načinu): troši se više uz više gasa, upozorenje na 25 % i 10 %,
+  bez goriva motor stane i avion kliži; stani bilo gdje na aerodromu i rezervoar se napuni
 - 🏅 **18 znački** (prvi let, 100 slijetanja, svi aerodromi, looping, valjak, iznad oblaka, noćni pilot,
   vatrogasac, diploma škole…) i **rekordi** (najveća visina i brzina, najmekše slijetanje, preletjeni km)
 - 👧👦 **više pilota** na istom uređaju: svaki ima svoje ime, zvjezdice, otoke i značke

@@ -13,7 +13,7 @@ import {
   TorusGeometry,
   Vector3,
 } from 'three';
-import type { FlightModel } from '../physics/FlightModel';
+import { FUEL_LOW, FUEL_VERY_LOW, type FlightModel } from '../physics/FlightModel';
 
 /**
  * The inside of the cockpit, seen in the cockpit (FPV) view: an instrument panel with four
@@ -252,9 +252,11 @@ export class Cockpit {
     ctx.lineTo(xs[3] + 10, y - r + 22);
     ctx.fill();
 
-    // Lamps along the top: gas, flaps, wheels and the stall warning.
+    // Lamps along the top: gas (and the tank), flaps, wheels and the stall warning.
+    const fuel = model.realism === 'arcade' ? '' : ` ⛽${Math.ceil(model.fuel * 100)}%`;
+    const fuelColor = model.realism === 'arcade' || model.fuel >= FUEL_LOW ? '#9be15d' : model.fuel >= FUEL_VERY_LOW ? '#ff9f43' : '#ff4d4d';
     const lamps: [string, string][] = [
-      [`GAS ${Math.round(model.throttle * 100)}%`, '#9be15d'],
+      [`GAS ${Math.round(model.throttle * 100)}%${fuel}`, fuelColor],
       [`ZAKRILCA ${Math.round(model.flaps * 100)}%`, model.flaps > 0.02 ? '#ffd166' : '#5c636b'],
       [model.spec.retractableGear ? (model.gear > 0.99 ? 'KOTAČI DOLJE' : model.gear < 0.01 ? 'KOTAČI GORE' : 'KOTAČI…') : 'KOTAČI', model.gear > 0.99 ? '#2ecc71' : '#ff9f43'],
       ['GUBITAK UZGONA', model.stalled ? '#ff4d4d' : '#3b4148'],

@@ -116,7 +116,8 @@ export class Sound {
     if (!ctx) return;
     const t = ctx.currentTime;
     const running = !model.crashed;
-    const throttle = model.throttle;
+    const engineOn = running && model.engineRunning;
+    const throttle = model.power;
     const speed = MathUtils.clamp(model.speed / model.spec.maxSpeed, 0, 1);
 
     const jet = this.engine === 'jet';
@@ -126,9 +127,9 @@ export class Sound {
     this.engineSub.frequency.setTargetAtTime(pitch / 2, t, SMOOTH);
     this.engineFilter.frequency.setTargetAtTime(jet ? 600 + throttle * 2500 : 300 + throttle * 1500, t, SMOOTH);
     const engineVolume = jet ? 0.03 + throttle * 0.06 : 0.05 + throttle * 0.12;
-    this.engineGain.gain.setTargetAtTime(running ? engineVolume : 0, t, SMOOTH);
+    this.engineGain.gain.setTargetAtTime(engineOn ? engineVolume : 0, t, SMOOTH);
     this.propLfo.frequency.setTargetAtTime(8 + throttle * 20, t, SMOOTH);
-    this.roarGain.gain.setTargetAtTime(running && jet ? 0.04 + throttle * 0.18 : 0, t, SMOOTH);
+    this.roarGain.gain.setTargetAtTime(engineOn && jet ? 0.04 + throttle * 0.18 : 0, t, SMOOTH);
 
     this.windFilter.frequency.setTargetAtTime(300 + speed * 1500, t, SMOOTH);
     this.windGain.gain.setTargetAtTime(running ? speed * speed * 0.25 : 0, t, SMOOTH);

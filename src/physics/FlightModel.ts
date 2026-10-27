@@ -28,6 +28,7 @@ export interface AircraftSpec {
   gearHeight: number; // m from the plane's origin down to the wheels
   wingspan: number; // m, sets how close to the ground the cushion of air (ground effect) starts
   maxLoad: number; // g, the most the wings may be loaded: pulling harder than this stops working
+  endurance: number; // s a full tank lasts at full throttle (normal and realistic; arcade never runs dry)
   floats: boolean; // a seaplane: can land on and take off from water
   retractableGear?: boolean; // the wheels can be pulled up in flight
   bellyHeight?: number; // m from the plane's origin down to its belly (a wheels-up landing)
@@ -41,10 +42,13 @@ export interface Ground {
 export const SEA_LEVEL = 0;
 export const FLAT_GROUND: Ground = { heightAt: () => 0 };
 
-export type FlightEvent = 'takeoff' | 'touchdown' | 'belly' | 'crash' | 'splash' | 'collision';
+export type FlightEvent = 'takeoff' | 'touchdown' | 'belly' | 'crash' | 'splash' | 'collision' | 'engine-out';
 export type GearCommand = 'up' | 'down' | 'fixed' | 'on-ground';
 
 export const FLAP_STAGES = [0, 0.5, 1];
+/** Tank levels for the "little fuel" and "nearly empty" warnings. */
+export const FUEL_LOW = 0.25;
+export const FUEL_VERY_LOW = 0.1;
 
 const G = 9.81;
 const THROTTLE_RATE = 0.5; // throttle change per second while a key is held
@@ -61,6 +65,8 @@ const CRASH_BANK = 0.5; // sin of the bank angle a touchdown can survive (~30°)
 const CRASH_NOSE_DOWN = -0.3; // sin of the pitch angle a touchdown can survive
 const CRASH_SLOPE = 0.35; // steepest hillside (rise over run) a touchdown can survive
 const LIFTOFF_CLIMB = 0.3; // m/s upward speed that counts as leaving the ground
+const IDLE_BURN = 0.1; // share of the full-throttle fuel use the engine burns at idle
+const REFUEL_TIME = 12; // s to fill an empty tank
 
 // --- arcade ---
 const GRAVITY_ALONG_PATH = G * 0.6; // softened: climbing slows you, diving speeds you up
@@ -140,6 +146,8 @@ export class FlightModel {
   gear = 1;
   /** 0 = flaps up, 1 = fully down; moves smoothly to the chosen stage. */
   flaps = 0;
+  /** 1 = full tank, 0 = empty: the engine stops (except in arcade, where the tank never runs dry). */
+  fuel = 1;
   /** Landed without wheels: slides to a stop and can't take off again. */
   bellyLanded = false;
   /** The stick and pedals as applied last step (-1..1), for moving the control surfaces. */
@@ -175,6 +183,23 @@ export class FlightModel {
     this.angleOfAttack = 0;
     this.trim = TRIM_ANGLE;
     this.pitchHeld = false;
+    this.fuel = 1;
+  }
+
+  /** False once the tank is empty: the propeller only windmills and the plane glides. */
+  get engineRunning(): boolean {
+    return this.fuel > 0 || this.realism === 'arcade';
+  }
+
+  /** The throttle the engine actually gives: none without fuel. */
+  get power(): number {
+    return this.engineRunning ? this.throttle : 0;
+  }
+
+  /** Fills the tank a little (standing at an airport); returns true once it is full. */
+  refuel(dt: number): boolean {
+    this.fuel = Math.min(1, this.fuel + dt / REFUEL_TIME);
+    return this.fuel >= 1;
   }
 
   /** The angle of attack that holds the plane up (1 g) at this airspeed with the flaps as they are. */
@@ -222,6 +247,11 @@ export class FlightModel {
       this.throttle += MathUtils.clamp(c.throttleSet - this.throttle, -step, step);
     } else {
       this.throttle = MathUtils.clamp(this.throttle + c.throttle * THROTTLE_RATE * dt, 0, 1);
+    }
+
+    if (this.realism !== 'arcade' && this.fuel > 0) {
+      this.fuel = Math.max(0, this.fuel - ((IDLE_BURN + (1 - IDLE_BURN) * this.throttle) * dt) / this.spec.endurance);
+      if (this.fuel === 0) events.push('engine-out');
     }
 
     // The surfaces follow the stick, also standing still on the ground (in the air the helper may move them too).
@@ -283,7 +313,7 @@ export class FlightModel {
     // 0 = no lift at all, 1 = wings fully flying.
     const lift = MathUtils.smoothstep(this.speed, stallSpeed * 0.6, stallSpeed);
 
-    let accel = this.throttle * this.maxThrust - this.dragFactor() * this.speed * this.speed - GRAVITY_ALONG_PATH * fwd.y;
+    let accel = this.power * this.maxThrust - this.dragFactor() * this.speed * this.speed - GRAVITY_ALONG_PATH * fwd.y;
     if (this.onGround) {
       const onWater = ground.heightAt(this.position.x, this.position.z) < SEA_LEVEL;
       const friction = this.bellyLanded ? BELLY_FRICTION : onWater ? WATER_FRICTION : ROLLING_FRICTION;
@@ -365,7 +395,7 @@ export class FlightModel {
 
     // --- forces ---
     force.set(0, -G, 0);
-    force.addScaledVector(fwd, this.throttle * this.maxThrust);
+    force.addScaledVector(fwd, this.power * this.maxThrust);
     liftDir.crossVectors(right, airDir).normalize(); // perpendicular to the airflow, towards the canopy
     force.addScaledVector(liftDir, lift);
     const drag = this.dragFactor() * airspeed * airspeed + INDUCED_DRAG * lift * Math.max(cl, 0);
