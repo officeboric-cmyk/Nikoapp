@@ -7,7 +7,9 @@ import { Sound } from './audio/Sound';
 import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
 import { Graphics } from './core/Graphics';
 import { Input } from './core/Input';
+import { newBadges } from './game/badges';
 import { collision, planeAhead } from './game/collisions';
+import { FlightLog } from './game/FlightLog';
 import { hillAhead } from './game/hillWarning';
 import { scoreLanding, starText } from './game/landing';
 import { MissionRun, type MissionResult, type MissionUpdate } from './game/MissionRun';
@@ -53,6 +55,9 @@ const radio = new Radio();
 radio.muted = sound.isMuted;
 /** Calls from the tower waiting to be made a little later (so they don't cover the start message). */
 const pendingCalls: { at: number; kind: string; text: string }[] = [];
+const flightLog = new FlightLog();
+const SAVE_EVERY = 10; // s between saves of the records while flying
+let nextSave = 0;
 const minimap = new Minimap(terrain);
 const instruments = new Instruments();
 const progress = new Progress();
@@ -167,6 +172,7 @@ function applyMission(update: MissionUpdate | null, now: number): void {
 function completeMission(result: MissionResult): void {
   const def = mission!.def;
   const record = progress.recordMission(def.id, result.stars);
+  checkBadges();
   document.getElementById('md-title')!.textContent = `${def.emoji} ${def.title}`;
   document.getElementById('md-stars')!.textContent = starText(result.stars);
   document.getElementById('md-detail')!.textContent = record ? `${result.detail} · Novi rekord!` : result.detail;
@@ -280,6 +286,7 @@ function respawn(): void {
   aircraft!.update(model, 0);
   rig.snap(model);
   touch.reset();
+  flightLog.reset();
   respawnAt = Infinity;
   accumulator = 0;
 }
@@ -409,9 +416,13 @@ function handleEvents(events: FlightEvent[], now: number): void {
       hud.flash(hasFlown ? 'Opet letiš! ✈️' : 'Bravo, letiš! 🎉', now);
       hasFlown = true;
       sound.takeoff();
+      progress.updateStats((s) => s.flights++);
+      progress.save();
+      checkBadges();
     } else if (event === 'touchdown') {
       effects.touchdown(model);
       const landing = scoreLanding(model, terrain);
+      recordLandingStats(landing.stars, landing.airport?.name);
       // Spoken only: the landing's stars are already on screen.
       if (landing.airport && landing.stars > 0) radio.call('landed', `Toranj ${landing.airport.name}: lijepo slijetanje, dobrodošli!`, now);
       const record = landing.airport && progress.recordLanding(landing.airport.name, landing.stars);
@@ -441,6 +452,33 @@ function handleEvents(events: FlightEvent[], now: number): void {
   }
 }
 
+/** Counts a landing towards the records and badges. */
+function recordLandingStats(stars: number, airport: string | undefined): void {
+  const onWater = terrain.heightAt(model.position.x, model.position.z) < SEA_LEVEL;
+  progress.updateStats((s) => {
+    if (stars > 0 || onWater) s.landings++;
+    if (stars === 3) s.perfectLandings++;
+    if (airport && !s.airports.includes(airport)) s.airports.push(airport);
+    if (onWater) s.waterLandings++;
+    if (environment.time === 'night' && (stars > 0 || onWater)) s.nightLandings++;
+    if (stars > 0) s.softestLanding = Math.min(s.softestLanding ?? Infinity, model.lastTouchdown.sink);
+  });
+  progress.save();
+  checkBadges();
+}
+
+/** Hands out any badges just earned, one message each. */
+function checkBadges(): void {
+  const earned = newBadges(progress, { missions: MISSIONS.map((m) => m.id), lessons: LESSONS.map((l) => l.id), airports: terrain.airports.length });
+  // A moment after whatever earned them, so that message is read first; one after another.
+  earned.forEach((badge, i) => {
+    setTimeout(() => {
+      hud.flash(`🏅 Nova značka: ${badge.emoji} ${badge.title}!`, timer.getElapsed(), 3.5);
+      sound.reward();
+    }, 1500 + i * 3600);
+  });
+}
+
 /** Flying over an island for the first time "discovers" it, like collecting a sticker. */
 function checkDiscovery(now: number): void {
   if (model.onGround || model.crashed) return;
@@ -448,6 +486,7 @@ function checkDiscovery(now: number): void {
   if (island && progress.discover(island.name)) {
     hud.flash(`🏝️ Otkrio si: ${island.name}! (${progress.discovered.length}/${ISLANDS.length})`, now, 3.5);
     sound.reward();
+    checkBadges();
   }
 }
 
@@ -558,6 +597,18 @@ function frame(time: number): void {
       applyMission(mission.update(dt, model, model.position.y - model.spec.gearHeight - ground), now);
     } else if (mission && !model.crashed) applyMission(mission.update(dt, model), now);
     checkDiscovery(now);
+    const trick = flightLog.update(dt, model, progress.stats);
+    if (trick) {
+      progress.updateStats((s) => (trick === 'loop' ? s.loops++ : s.rolls++));
+      hud.flash(trick === 'loop' ? '🔄 Looping! Bravo!' : '🌀 Valjak! Bravo!', now, 2.5);
+      sound.reward();
+      checkBadges();
+    }
+    if (now >= nextSave) {
+      nextSave = now + SAVE_EVERY;
+      progress.save();
+      checkBadges(); // height, speed and distance badges
+    }
     aircraft!.update(model, dt);
     rig.update(model, dt);
     sound.update(model);

@@ -109,6 +109,7 @@ const UP = new Vector3(0, 1, 0);
 const fwd = new Vector3();
 const right = new Vector3();
 const up = new Vector3();
+const limitUp = new Vector3();
 const air = new Vector3();
 const airDir = new Vector3();
 const liftDir = new Vector3();
@@ -262,7 +263,8 @@ export class FlightModel {
 
   /** Stops the stick from rolling or pitching past the limits (keeps the plane the right way up). */
   private limit(input: { pitch: number; roll: number }, limits: { bank: number; pitch: number }): void {
-    const bank = Math.asin(MathUtils.clamp(-right.y, -1, 1)); // + = right wing down
+    // The true bank, also with the nose high (the wing's height alone reads too little then, so a climbing plane could roll over).
+    const bank = Math.atan2(-right.y, limitUp.copy(UP).applyQuaternion(this.quaternion).y); // + = right wing down
     if (Math.abs(bank) >= limits.bank && Math.sign(input.roll) === Math.sign(bank)) input.roll = 0;
     const pitch = Math.asin(MathUtils.clamp(fwd.y, -1, 1));
     if (Math.abs(pitch) >= limits.pitch && Math.sign(input.pitch) === Math.sign(pitch)) input.pitch = 0;

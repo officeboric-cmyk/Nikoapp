@@ -12,6 +12,9 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
   gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧) i
   paketi s padobranom na mete na tri otoka (`B` ili 📦; plavi krug pokazuje gdje bi pao)
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
+- 🏅 **18 znački** (prvi let, 100 slijetanja, svi aerodromi, looping, valjak, iznad oblaka, noćni pilot,
+  vatrogasac, diploma škole…) i **rekordi** (najveća visina i brzina, najmekše slijetanje, preletjeni km)
+- 👧👦 **više pilota** na istom uređaju: svaki ima svoje ime, zvjezdice, otoke i značke
 - pomoć za slijetanje: **PAPI svjetla** uz svaku pistu (2 bijela + 2 crvena = dobar prilaz, sva bijela =
   previsoko, sva crvena = prenisko) i plavi **krugovi** koji vode do piste (u arkadnom i normalnom načinu)
 - **dan, zalazak i noć** (sunce, mjesec, svjetla piste, svjetionik, zvijezde) i **vrijeme**: vedro, vjetar, kiša
@@ -114,7 +117,9 @@ src/
   game/landing.ts         – ocjena slijetanja (1–3 zvjezdice)
   game/hillWarning.ts     – upozorenje „Pazi, brdo!"
   game/collisions.ts      – sudari s drugim avionima i upozorenje „Pazi, avion ispred!"
-  game/Progress.ts        – spremljeni napredak (zvjezdice, otkriveni otoci)
+  game/Progress.ts        – spremljeni napredak po pilotu (zvjezdice, otoci, rekordi, značke)
+  game/badges.ts          – popis znački i kad se dobivaju
+  game/FlightLog.ts       – rekordi leta i prepoznavanje loopinga i valjka
   world/islands.ts        – popis otoka i aerodroma (lako dodati nove)
   world/Terrain.ts        – visinske mape otoka, "koliko je visoko tlo ovdje?"
   world/Airport.ts        – pista, oznake, toranj, hangar, terminal, vjetrokaz, izravnavanje tla

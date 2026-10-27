@@ -2,6 +2,7 @@ import { AIRLINES, airlineById, type Airline } from '../aircraft/airlines';
 import type { AircraftType } from '../aircraft/catalog';
 import type { Realism } from '../physics/FlightModel';
 import { starText } from '../game/landing';
+import { BADGES } from '../game/badges';
 import type { LessonDef } from '../game/lessons';
 import type { MissionDef } from '../game/missions';
 import type { Progress } from '../game/Progress';
@@ -17,7 +18,7 @@ export interface Choice {
 
 const CHOICE_KEY = 'niko-leti-choice';
 
-type Tab = 'missions' | 'school' | 'free';
+type Tab = 'missions' | 'school' | 'free' | 'badges';
 
 /** What the menu asks the game to do. */
 export interface MenuHandlers {
@@ -58,8 +59,9 @@ const CONTROL_STYLES = [
 ];
 
 /**
- * The start screen, also opened with ☰ / Esc. Two tabs: missions to pick from, or free
- * flight with a plane, airline and airport of your choice.
+ * The start screen, also opened with ☰ / Esc. Tabs: missions to pick from, flying school,
+ * free flight with a plane, airline and airport of your choice, and the pilot's badges.
+ * Above them, the pilot picker: each child keeps their own progress.
  */
 export class Menu {
   private aircraft: AircraftType;
@@ -87,7 +89,7 @@ export class Menu {
     private readonly handlers: MenuHandlers,
   ) {
     const saved = loadChoice();
-    this.tab = saved?.tab === 'free' || saved?.tab === 'school' ? saved.tab : 'missions';
+    this.tab = (['free', 'school', 'badges'] as const).find((t) => t === saved?.tab) ?? 'missions';
     this.time = TIMES.find((t) => t.id === saved?.time)?.id ?? 'day';
     this.weather = WEATHERS.find((w) => w.id === saved?.weather)?.id ?? 'clear';
     this.realControls = saved?.controls !== 'simple';
@@ -163,6 +165,8 @@ export class Menu {
       button.dataset.id = mission.id;
       button.append(span('emoji', mission.emoji), bold(mission.title), span('stars', ''), small(mission.brief));
     }
+
+    this.buildProfiles();
 
     const lessonList = document.getElementById('menu-lessons')!;
     for (const lesson of lessons) {
@@ -253,6 +257,69 @@ export class Menu {
     this.render();
   }
 
+  /** The pilot picker: each child has their own stars, islands and badges. */
+  private buildProfiles(): void {
+    const select = document.getElementById('profile-select') as HTMLSelectElement;
+    const fill = () => {
+      select.replaceChildren();
+      for (const profile of this.progress.allProfiles) select.add(new Option(`${profile.avatar} ${profile.name}`, profile.id));
+      select.add(new Option('➕ Novi pilot…', 'new'));
+      select.add(new Option('✏️ Promijeni ime…', 'rename'));
+      if (this.progress.allProfiles.length > 1) select.add(new Option('🗑️ Obriši ovog pilota…', 'delete'));
+      select.value = this.progress.profile.id;
+    };
+    select.addEventListener('change', () => {
+      const value = select.value;
+      if (value === 'new') {
+        const name = window.prompt('Kako se zove novi pilot?');
+        if (name?.trim()) this.progress.addProfile(name);
+      } else if (value === 'rename') {
+        const name = window.prompt('Novo ime pilota:', this.progress.profile.name);
+        if (name) this.progress.renameProfile(name);
+      } else if (value === 'delete') {
+        if (window.confirm(`Obrisati pilota ${this.progress.profile.name} i sve njegove zvjezdice?`)) this.progress.deleteProfile();
+      } else {
+        this.progress.useProfile(value);
+      }
+      fill();
+      this.render();
+      select.blur();
+    });
+    fill();
+  }
+
+  /** Badges (earned ones bright) and the pilot's records. */
+  private renderBadges(): void {
+    const grid = document.getElementById('menu-badges')!;
+    grid.replaceChildren();
+    for (const badge of BADGES) {
+      const earned = this.progress.badges.includes(badge.id);
+      const item = document.createElement('div');
+      item.className = earned ? 'badge earned' : 'badge';
+      item.append(span('emoji', earned ? badge.emoji : '🔒'), bold(badge.title), small(badge.description));
+      grid.append(item);
+    }
+    const s = this.progress.stats;
+    const rows: [string, string][] = [
+      ['🛫 Letova', `${s.flights}`],
+      ['🛬 Slijetanja', `${s.landings}`],
+      ['⭐ Savršenih slijetanja', `${s.perfectLandings}`],
+      ['🪶 Najmekše slijetanje', s.softestLanding === null ? '–' : `${s.softestLanding.toFixed(1)} m/s`],
+      ['☁️ Najveća visina', `${Math.round(s.maxAltitude)} m`],
+      ['⚡ Najveća brzina', `${Math.round(s.maxSpeed)} km/h`],
+      ['🧭 Ukupno preletio', `${s.distance.toFixed(1).replace('.', ',')} km`],
+      ['🔄 Loopinga / 🌀 valjaka', `${s.loops} / ${s.rolls}`],
+    ];
+    const records = document.getElementById('menu-records')!;
+    records.replaceChildren(
+      ...rows.map(([name, value]) => {
+        const row = document.createElement('div');
+        row.append(span('record-name', name), bold(value));
+        return row;
+      }),
+    );
+  }
+
   private save(): void {
     try {
       const saved = {
@@ -297,6 +364,8 @@ export class Menu {
     }
     document.getElementById('tab-missions')!.classList.toggle('hidden', this.tab !== 'missions');
     document.getElementById('tab-school')!.classList.toggle('hidden', this.tab !== 'school');
+    document.getElementById('tab-badges')!.classList.toggle('hidden', this.tab !== 'badges');
+    if (this.tab === 'badges') this.renderBadges();
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#menu-lessons .choice')) {
       button.querySelector('.stars')!.textContent = starText(this.progress.missionStars(button.dataset.id!));
     }
