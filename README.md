@@ -22,6 +22,8 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - instrumenti (umjetni horizont, kompas), strelica do cilja, mini-karta, upozorenja „Pazi, brdo!" i „Pazi, avion ispred!"
 - sudar s drugim avionom (u zraku ili parkiranim na aerodromu) je pad, kao i udar u brdo
 - 3 kamere: iza aviona, iz kokpita (FPV) i sa strane; zvuk motora, vjetra i kiše
+- **kokpit iznutra** u pogledu iz kokpita: brzinomjer, umjetni horizont, visinomjer, kompas, žaruljice
+  (gas, zakrilca, kotači, gubitak uzgona), volan (u mlažnjaku palica) i ručica gasa koji se miču
 - 📻 **kontrola leta**: toranj javlja „slobodno za polijetanje/slijetanje" s brojem piste i vjetrom, pozdravi
   nakon slijetanja i upozori na promet i kotače; govori hrvatskim glasom preglednika ako ga uređaj ima
   (inače samo tekst), utiša se s `M`
@@ -127,6 +129,7 @@ src/
   camera/CameraRig.ts     – 3 kamere (iza, kokpit/FPV, sa strane), nikad u brdu
   ui/HUD.ts               – brzina, visina iznad tla, gas, zakrilca, kotači, poruke, pomoć
   ui/Instruments.ts       – umjetni horizont, kompas, strelica do cilja
+  ui/Cockpit.ts           – ploča s instrumentima, volan/palica i ručica gasa u pogledu iz kokpita
   ui/Menu.ts              – misije, slobodno letenje, doba dana, vrijeme
   ui/Minimap.ts           – mini-karta otoka, drugih aviona i cilja
   ui/TouchControls.ts     – klizač za gas, palica i kočnica za ekrane na dodir

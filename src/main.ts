@@ -15,6 +15,7 @@ import { LESSONS, LessonRun, type LessonDef, type Words } from './game/lessons';
 import { MISSIONS, type MissionDef } from './game/missions';
 import { Progress } from './game/Progress';
 import { FlightModel, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
+import { Cockpit } from './ui/Cockpit';
 import { HUD } from './ui/HUD';
 import { Instruments, type Target } from './ui/Instruments';
 import { Menu, type Choice, type Quality } from './ui/Menu';
@@ -56,6 +57,8 @@ const minimap = new Minimap(terrain);
 const instruments = new Instruments();
 const progress = new Progress();
 const rig = new CameraRig(camera, terrain);
+scene.add(camera); // the cockpit's panel rides on the camera
+const cockpit = new Cockpit(camera);
 const timer = new Timer();
 
 let choice: Choice;
@@ -259,6 +262,7 @@ function setup(picked: Choice): void {
     rig.distance = picked.aircraft.camera.distance;
     rig.height = picked.aircraft.camera.height;
     rig.cockpit.fromArray(picked.aircraft.camera.cockpit);
+    cockpit.setStick(picked.aircraft.id === 'jet');
     gearButton.classList.toggle('hidden', !picked.aircraft.spec.retractableGear);
     sound.setEngine(picked.aircraft.engine);
     effects.setExhausts(picked.aircraft.exhausts ?? []);
@@ -573,6 +577,7 @@ function frame(time: number): void {
   minimap.update(model, traffic.positions, mission ? target : null);
   instruments.update(model, target);
   touch.update(model.throttle);
+  cockpit.update(model, started && rig.mode === 'cockpit', paused ? 0 : dt);
   graphics.render();
 }
 requestAnimationFrame(frame);
