@@ -3,7 +3,9 @@
 Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScript + Vite).
 
 - **12 otoka**: Sunčani, Zeleni, Planinski, Pješčani, Borov, Dugi, Vulkan, Ledeni, Kameni, Gusarski, Otok dupina i Otok svjetionika
-- **6 aerodroma** s pistom (i brojevima na njoj), tornjem, hangarom, terminalom, parkiranim avionima i vjetrokazom
+- **6 aerodroma**: asfaltna pista s pravim oznakama (brojevi, rubne crte, zona i točka dodira), betonska
+  stajanka sa žutim linijama, kontrolni toranj, hangar od lima, terminal sa staklenom fasadom i imenom
+  otoka, spremnici i cisterna goriva, reflektori, parkiralište s autima, parkirani avioni i vjetrokaz
 - **4 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!) i Putnički avion
 - **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
 - **🎓 škola letenja**: 5 lekcija korak po korak (polijetanje, zaokreti, gore i dolje, zakrilca, slijetanje),
@@ -25,6 +27,9 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
   previsoko, sva crvena = prenisko) i plavi **krugovi** koji vode do piste (u arkadnom i normalnom načinu)
 - **dan, zalazak i noć** (sunce, mjesec, svjetla piste, svjetionik, zvijezde) i **vrijeme**: vedro, vjetar, kiša
 - more s valićima, odrazom neba, plićacima i pjenom; palme na plažama
+- **otoci kao na Jadranu**: livade sa suhim i bujnim dijelovima i pravim busenima trave oko aviona kad je
+  nisko, borove šume, česmine, makija, čempresi, maslinici u redovima, suhozidi oko polja, sela od
+  kamenih kuća s kupama kanalicama, škurama i dimnjacima, zvonici; noću svijetle prozori
 - dim guma pri slijetanju, prašina na travi, prskanje vode, bijeli tragovi iza mlažnjaka
 - glatki, detaljni avioni: aerodinamičan trup, krila s pravim profilom, kokpit s pilotom, prozori,
   motori s ventilatorom; pokretna krilca, kormila i zakrilca, kotači na oprugama, zamućeni propeler
@@ -129,6 +134,11 @@ src/
   game/FlightLog.ts       – rekordi leta i prepoznavanje loopinga i valjka
   world/islands.ts        – popis otoka i aerodroma (lako dodati nove)
   world/Terrain.ts        – visinske mape otoka, "koliko je visoko tlo ovdje?"
+  world/groundDetail.ts   – detalji livade u shaderu (suhi i bujni dijelovi, zrnatost izbliza)
+  world/Grass.ts          – busenovi trave oko kamere
+  world/vegetation.ts     – oblici stabala i grmlja (blizu detaljni, daleko jednostavni)
+  world/buildings.ts      – kuće s dvostrešnim krovom
+  world/textures.ts       – teksture nacrtane u pregledniku (zidovi, crijep, asfalt, beton, lim, staklo)
   world/Airport.ts        – pista, oznake, toranj, hangar, terminal, vjetrokaz, izravnavanje tla
   world/World.ts          – svjetlo, šume, palme, sela, svjetionik, oblaci, imena otoka, brojevi pista,
                             parkirani avioni, noćna svjetla

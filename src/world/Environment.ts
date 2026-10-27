@@ -86,7 +86,7 @@ const LOOKS: Record<TimeOfDay, Look> = {
     ambient: 1.25,
     clouds: 0xffb38a,
     cloudGlow: 0.35,
-    windows: 0.15,
+    windows: 0.5,
     lightsOn: true,
   },
   night: {
@@ -104,7 +104,7 @@ const LOOKS: Record<TimeOfDay, Look> = {
     ambient: 0.55,
     clouds: 0x4a5878,
     cloudGlow: 0.1,
-    windows: 0.45,
+    windows: 1.4,
     lightsOn: true,
   },
 };
@@ -204,6 +204,7 @@ export class Environment {
     cloudMaterial.color.setHex(weather === 'rain' ? 0x9aa5b1 : 0xffffff);
     windowsMaterial.emissive.setHex(0xffc46b);
     windowsMaterial.emissiveIntensity = look.windows;
+    for (const material of this.world.nightGlow) material.emissiveIntensity = look.windows;
 
     for (const object of nightOnly) object.visible = look.lightsOn;
     for (const material of Object.values(NAV_LIGHTS)) material.visible = look.lightsOn;

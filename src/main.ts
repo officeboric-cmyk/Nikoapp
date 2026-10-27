@@ -322,6 +322,7 @@ async function setSteering(tilt: boolean, explain: boolean): Promise<void> {
 
 function setQuality(quality: Quality): void {
   graphics.setQuality(quality);
+  world.setQuality(quality);
   effects.setViewport(graphics.pixelHeight);
   autoQuality.restart();
 }
@@ -687,7 +688,7 @@ function frame(time: number): void {
 
   const below = Math.max(terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
   const altitude = model.position.y - model.spec.gearHeight - below;
-  world.update(model.position, paused ? 0 : dt);
+  world.update(model.position, camera.position, paused ? 0 : dt);
   environment.update(paused ? 0 : dt, camera.position);
   effects.update(paused ? 0 : dt, model, terrain);
   // Guide rings for beginners; the PAPI lights help in every mode.

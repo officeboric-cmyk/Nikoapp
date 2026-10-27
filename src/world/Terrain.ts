@@ -1,21 +1,25 @@
 import { BufferAttribute, Color, Group, MathUtils, Mesh, MeshStandardMaterial, PlaneGeometry } from 'three';
 import { SEA_LEVEL, type Ground } from '../physics/FlightModel';
 import { Airport } from './Airport';
+import { addGroundDetail } from './groundDetail';
 import { ISLANDS, type IslandDef } from './islands';
 import { fbm, noise2 } from './noise';
+import { woodsAt } from './vegetation';
 
 const SEA_FLOOR = -30;
 const TARGET_CELL = 36; // m between terrain vertices
 const MAX_SEGMENTS = 170;
 
-const SAND = new Color(0xf2e3a0);
-const WET_SAND = new Color(0xc9b77c);
-const GRASS_LIGHT = new Color(0x8fd16a);
-const GRASS_DARK = new Color(0x5a9e3c);
-const FOREST = new Color(0x4f7d3a);
-const ROCK = new Color(0x8d8a85);
-const SNOW = new Color(0xffffff);
-const LAVA_ROCK = new Color(0x5c4d45);
+// The colours of Adriatic islands in summer: pale beaches, grass, dark scrub higher up, white limestone.
+const SAND = new Color(0xe9dbb0);
+const WET_SAND = new Color(0xbba982);
+const GRASS_LIGHT = new Color(0x84a14f);
+const GRASS_DARK = new Color(0x5d8838);
+const FOREST = new Color(0x48682f);
+const WOODS = new Color(0x3f5a2b); // the dark floor of pine woods and scrub, seen from afar
+const ROCK = new Color(0xa9a59a);
+const SNOW = new Color(0xf4f6f8);
+const LAVA_ROCK = new Color(0x5a4c45);
 
 /** One island's heightmap on a square grid, plus its low-poly mesh. */
 class IslandTerrain {
@@ -124,7 +128,9 @@ class IslandTerrain {
     }
     geometry.setAttribute('color', new BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
-    const mesh = new Mesh(geometry, new MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }));
+    const material = new MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+    addGroundDetail(material);
+    const mesh = new Mesh(geometry, material);
     mesh.receiveShadow = true;
     return mesh;
   }
@@ -138,6 +144,9 @@ class IslandTerrain {
     else {
       out.lerpColors(GRASS_LIGHT, GRASS_DARK, 0.5 + 0.5 * noise2(x / 250, z / 250, this.seed + 3));
       if (h > 160) out.lerp(FOREST, MathUtils.smoothstep(h, 160, 280));
+      // Where the woods are (see World), the ground is shaded by them; no trees grow by the airport.
+      const cleared = this.airport ? this.airport.flattenWeight(x, z) : 0;
+      if (h > 6 && !(this.def.shape === 'cone' && h > 110)) out.lerp(WOODS, 0.75 * MathUtils.smoothstep(woodsAt(x, z), 0.1, 0.4) * (1 - cleared));
     }
   }
 }

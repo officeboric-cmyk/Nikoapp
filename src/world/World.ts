@@ -1,6 +1,7 @@
 import {
   AdditiveBlending,
   BoxGeometry,
+  type BufferGeometry,
   CanvasTexture,
   Color,
   ConeGeometry,
@@ -28,19 +29,46 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { AIRCRAFT } from '../aircraft/catalog';
 import { planeRadius, type Obstacle } from '../game/collisions';
-import { RUNWAY_WIDTH, type Airport } from './Airport';
+import { airportGlow, RUNWAY_WIDTH, type Airport } from './Airport';
+import { houseTemplate } from './buildings';
+import { Grass } from './Grass';
 import { MAP_HALF_SIZE, type IslandDef } from './islands';
 import { lightMaterial, lightPoints } from './lights';
 import { mulberry32, noise2 } from './noise';
 import { Sea } from './Sea';
 import { Terrain } from './Terrain';
+import { belfry, houseWall, roofTiles, stoneBlocks } from './textures';
+import { speciesGeometry, woodsAt, type Detail, type Species } from './vegetation';
+
+/** The trees and bushes of one kind in one square of the map, drawn in full detail or simpler. */
+interface PlantCell {
+  near: InstancedMesh;
+  far: InstancedMesh;
+  cx: number;
+  cz: number;
+  full: number;
+  maxDistance: number;
+}
+
+/** A village: its middle, its island (index) and where its houses stand. */
+export interface Village {
+  x: number;
+  z: number;
+  island: number;
+  houses: { x: number; z: number }[];
+}
 
 /** Sky, light, the islands with their trees and villages, clouds and island name labels. */
 
 export const SKY_COLOR = 0x87ceeb;
 const SHADOW_RANGE = 80; // m around the plane covered by the sun's shadow map
-const TREE_COUNT = 6000;
 const PALM_COUNT = 700;
+const FAST_PLANTS = 0.55; // share of the trees and bushes drawn on the fast setting
+const PLANT_CELL = 1500; // m: trees and bushes are drawn in squares this big
+const NEAR_PLANTS = 900; // m from a square within which its plants are drawn in full detail
+const BUSH_DISTANCE = 3000; // m beyond which scrub is too small to see
+const WALL_PIECE = 4; // m, dry-stone walls are laid in pieces this long
+const WALL_DISTANCE = 2500; // m beyond which the walls are too thin to see
 const LABEL_HIDE_NEAR = 700; // m, labels fade out when you get this close
 const LABEL_SHOW_FAR = 1600; // m, fully visible from here on
 
@@ -55,8 +83,17 @@ export class World {
   readonly nightOnly: Object3D[] = [];
   readonly cloudMaterial = new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 1, flatShading: true });
   readonly windowsMaterial = new MeshStandardMaterial({ flatShading: true });
+  /** Everything else that lights up at night with the windows: the terminals' glass, apron floodlights. */
+  readonly nightGlow = airportGlow();
   /** The planes parked on the aprons, which can be bumped into while taxiing. */
   readonly parked: Obstacle[] = [];
+  /** One village per island. */
+  readonly villages: Village[];
+  private readonly grass: Grass;
+  /** Every drawing of trees and bushes, with how many it holds (fast quality draws only some). */
+  private readonly plants: PlantCell[] = [];
+  /** Each village's dry-stone walls, hidden from far away (they are thin). */
+  private readonly stoneWalls: { mesh: InstancedMesh; x: number; z: number }[] = [];
   private readonly beams: Object3D[] = [];
   private readonly labels: Sprite[] = [];
 
@@ -79,9 +116,11 @@ export class World {
     this.sea = new Sea(this.terrain);
     scene.add(this.sea.mesh);
     const rand = mulberry32(42);
-    this.addTrees(rand);
+    this.grass = new Grass(scene, this.terrain);
+    this.villages = this.addVillages(rand);
+    this.addStoneWalls(rand, this.villages);
+    this.addVegetation(rand, this.villages);
     this.addPalms(rand);
-    this.addHouses(rand);
     this.addLighthouses();
     this.addRunwayLights();
     for (const airport of this.terrain.airports) {
@@ -93,8 +132,19 @@ export class World {
     for (const object of this.nightOnly) object.visible = false;
   }
 
-  /** Keeps the shadow-casting sun centred on the plane, fades labels that are too close, turns the lighthouse beams and moves the waves. */
-  update(focus: Vector3, dt: number): void {
+  /**
+   * Keeps the shadow-casting sun centred on the plane, grows grass around the camera, fades labels that
+   * are too close, turns the lighthouse beams and moves the waves.
+   */
+  update(focus: Vector3, camera: Vector3, dt: number): void {
+    this.grass.update(camera, dt);
+    // Trees near the camera in full detail, the rest simpler; far-off scrub not at all.
+    for (const plant of this.plants) {
+      const d = Math.hypot(Math.max(0, Math.abs(camera.x - plant.cx) - PLANT_CELL / 2), Math.max(0, Math.abs(camera.z - plant.cz) - PLANT_CELL / 2));
+      plant.near.visible = d < NEAR_PLANTS;
+      plant.far.visible = d >= NEAR_PLANTS && d < plant.maxDistance;
+    }
+    for (const walls of this.stoneWalls) walls.mesh.visible = Math.hypot(camera.x - walls.x, camera.z - walls.z) < WALL_DISTANCE;
     for (const beam of this.beams) beam.rotation.y += dt * 0.8;
     this.sea.update(dt);
     this.sun.target.position.copy(focus);
@@ -104,6 +154,12 @@ export class World {
       label.material.opacity = MathUtils.smoothstep(distance, LABEL_HIDE_NEAR, LABEL_SHOW_FAR);
       label.visible = label.material.opacity > 0;
     }
+  }
+
+  /** Fast: less grass and fewer trees. */
+  setQuality(quality: 'fast' | 'pretty'): void {
+    this.grass.setQuality(quality);
+    for (const plant of this.plants) plant.near.count = plant.far.count = quality === 'fast' ? Math.ceil(plant.full * FAST_PLANTS) : plant.full;
   }
 
   private slopeAt(x: number, z: number): number {
@@ -122,48 +178,116 @@ export class World {
     return [island.x + (rand() * 2 - 1) * r, island.z + (rand() * 2 - 1) * r];
   }
 
-  private addTrees(rand: () => number): void {
+  /**
+   * The islands' plants: Aleppo pine woods in patches, holm oaks at their edges, scrub everywhere it can
+   * grow, cypresses around the villages and olive groves in rows beside them. One drawing per kind of
+   * plant and island, so islands out of view are skipped.
+   */
+  private addVegetation(rand: () => number, villages: Village[]): void {
     const islands = this.terrain.islandDefs();
     const weights = islands.map((i) => i.radius * i.radius * (i.stretch ? i.stretch[0] * i.stretch[1] : 1));
     const total = weights.reduce((a, b) => a + b, 0);
-
-    const trunks = new InstancedMesh(
-      new CylinderGeometry(0.4, 0.6, 3, 6).translate(0, 1.5, 0),
-      new MeshStandardMaterial({ color: 0x8b5a2b, flatShading: true }),
-      TREE_COUNT,
-    );
-    const crowns = new InstancedMesh(
-      new ConeGeometry(3, 8, 7).translate(0, 7, 0),
-      new MeshStandardMaterial({ color: 0x2d6a4f, flatShading: true }),
-      TREE_COUNT,
-    );
+    const groups = new Map<string, { species: Species; cx: number; cz: number; matrices: Matrix4[]; colors: Color[] }>();
     const m = new Matrix4();
-    const color = new Color();
-    let placed = 0;
-    for (let attempt = 0; attempt < TREE_COUNT * 20 && placed < TREE_COUNT; attempt++) {
-      // Pick an island in proportion to its size, then a spot on it.
-      let pick = rand() * total;
-      let island = islands[0];
-      for (let k = 0; k < islands.length; k++) {
-        pick -= weights[k];
-        if (pick <= 0) {
-          island = islands[k];
-          break;
+    const add = (species: Species, x: number, z: number, y: number, size: number, stretch = 1) => {
+      const ci = Math.floor(x / PLANT_CELL);
+      const cj = Math.floor(z / PLANT_CELL);
+      const key = `${species}:${ci}:${cj}`;
+      let group = groups.get(key);
+      if (!group) groups.set(key, (group = { species, cx: (ci + 0.5) * PLANT_CELL, cz: (cj + 0.5) * PLANT_CELL, matrices: [], colors: [] }));
+      group.matrices.push(m.compose(new Vector3(x, y, z), yRotation(rand() * Math.PI * 2), new Vector3(size, size * stretch, size)).clone());
+      const k = 0.85 + rand() * 0.27;
+      group.colors.push(new Color(k * (0.95 + rand() * 0.1), k, k * (0.92 + rand() * 0.12)));
+    };
+    const nearHouse = (x: number, z: number, gap: number) =>
+      villages.some((v) => Math.hypot(v.x - x, v.z - z) < 450 && v.houses.some((h) => Math.hypot(h.x - x, h.z - z) < gap));
+    /** Ground a plant can grow on: not beach, bare rock, snow, lava, airport or a house. */
+    const growable = (island: IslandDef, x: number, z: number, h: number, maxSlope: number) =>
+      h >= 3 &&
+      h < (island.snowLine ?? 520) - 40 &&
+      !(island.shape === 'cone' && h > 110) &&
+      this.slopeAt(x, z) < maxSlope &&
+      !this.nearAirport(x, z) &&
+      !nearHouse(x, z, 8);
+
+    const counts: [Species, number][] = [
+      ['pine', 9000],
+      ['oak', 3200],
+      ['bush', 9000],
+    ];
+    for (const [species, wanted] of counts) {
+      let placed = 0;
+      for (let attempt = 0; attempt < wanted * 25 && placed < wanted; attempt++) {
+        // Pick an island in proportion to its size, then a spot on it.
+        let pick = rand() * total;
+        let index = 0;
+        while (index < islands.length - 1 && (pick -= weights[index]) > 0) index++;
+        const island = islands[index];
+        const [x, z] = this.pointOn(island, rand);
+        const h = this.terrain.heightAt(x, z);
+        const woods = woodsAt(x, z); // woods grow in patches
+        const fits =
+          species === 'pine'
+            ? woods > 0.2 && h > 6 && h < 340 && growable(island, x, z, h, 0.6)
+            : species === 'oak'
+              ? woods > -0.3 && woods < 0.45 && h < 240 && rand() < 0.7 && growable(island, x, z, h, 0.5)
+              : woods > -0.55 + rand() * 0.6 && growable(island, x, z, h, 0.85); // thicker towards the woods
+        if (!fits) continue;
+        const size = species === 'pine' ? 0.95 + rand() * 0.6 : species === 'oak' ? 0.7 + rand() * 0.5 : 0.6 + rand() * 0.9;
+        add(species, x, z, h - 0.3, size, species === 'bush' ? 0.7 + rand() * 0.5 : 1);
+        placed++;
+      }
+    }
+
+    for (const village of villages) {
+      // Cypresses dotted around the houses.
+      for (let k = 0; k < 14; k++) {
+        const a = rand() * Math.PI * 2;
+        const r = 40 + rand() * 180;
+        const x = village.x + Math.cos(a) * r;
+        const z = village.z + Math.sin(a) * r;
+        const h = this.terrain.heightAt(x, z);
+        if (growable(islands[village.island], x, z, h, 0.5)) add('cypress', x, z, h - 0.2, 0.8 + rand() * 0.5);
+      }
+      // Olive groves: trees in neat rows on the gentle slopes beside the village.
+      for (let grove = 0; grove < 2; grove++) {
+        const a = rand() * Math.PI * 2;
+        const cx = village.x + Math.cos(a) * (140 + rand() * 120);
+        const cz = village.z + Math.sin(a) * (140 + rand() * 120);
+        const turn = rand() * Math.PI;
+        const [dx, dz] = [Math.cos(turn), Math.sin(turn)];
+        for (let i = -5; i <= 5; i++) {
+          for (let j = -4; j <= 4; j++) {
+            const x = cx + (i * dx - j * dz) * 8 + (rand() - 0.5);
+            const z = cz + (i * dz + j * dx) * 8 + (rand() - 0.5);
+            const h = this.terrain.heightAt(x, z);
+            if (growable(islands[village.island], x, z, h, 0.35)) add('olive', x, z, h - 0.2, 0.8 + rand() * 0.3);
+          }
         }
       }
-      const [x, z] = this.pointOn(island, rand);
-      const h = this.terrain.heightAt(x, z);
-      const woods = noise2(x / 400, z / 400, 99); // trees grow in patches
-      if (h < 3 || h > 330 || woods < -0.15 || this.slopeAt(x, z) > 0.5 || this.nearAirport(x, z)) continue;
-      const s = 0.7 + rand() * 0.8;
-      m.compose(new Vector3(x, h - 0.3, z), yRotation(rand() * Math.PI * 2), new Vector3(s, s, s));
-      trunks.setMatrixAt(placed, m);
-      crowns.setMatrixAt(placed, m);
-      crowns.setColorAt(placed, color.setHSL(0.3 + rand() * 0.08, 0.55, 0.25 + rand() * 0.12));
-      placed++;
     }
-    trunks.count = crowns.count = placed;
-    this.scene.add(trunks, crowns);
+
+    const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+    const shapes = new Map<string, BufferGeometry>();
+    const shape = (species: Species, detail: Detail) => {
+      const key = `${species}:${detail}`;
+      if (!shapes.has(key)) shapes.set(key, speciesGeometry(species, detail));
+      return shapes.get(key)!;
+    };
+    for (const { species, cx, cz, matrices, colors } of groups.values()) {
+      const [near, far] = (['near', 'far'] as const).map((detail) => {
+        const mesh = new InstancedMesh(shape(species, detail), material, matrices.length);
+        matrices.forEach((matrix, i) => {
+          mesh.setMatrixAt(i, matrix);
+          mesh.setColorAt(i, colors[i]);
+        });
+        mesh.computeBoundingSphere();
+        mesh.receiveShadow = detail === 'near';
+        this.scene.add(mesh);
+        return mesh;
+      });
+      this.plants.push({ near, far, cx, cz, full: matrices.length, maxDistance: species === 'bush' ? BUSH_DISTANCE : Infinity });
+    }
   }
 
   /** Palm trees along the sandy beaches, leaning a little this way and that. */
@@ -248,51 +372,147 @@ export class World {
     }
   }
 
-  private addHouses(rand: () => number): void {
-    const wallColors = [0xfff3b0, 0xf1faee, 0xffd6a5, 0xcaf0f8, 0xffadad];
-    const spots: { x: number; z: number; y: number; w: number; h: number; turn: number }[] = [];
-    for (const island of this.terrain.islandDefs()) {
-      const wanted = island.airport ? 18 : island.radius > 600 ? 8 : 3;
-      // One village per island, somewhere on the lower slopes.
+  /**
+   * One village per island on its lower slopes: stone houses of three sizes on a loose grid, all turned
+   * about the same way like houses along streets, and a bell tower in the bigger ones.
+   */
+  private addVillages(rand: () => number): Village[] {
+    const templates = [houseTemplate(7, 5.5, 3.6), houseTemplate(8.5, 7, 6.8), houseTemplate(14, 7.5, 6.8, false)];
+    const placed = templates.map(() => ({ matrices: [] as Matrix4[], walls: [] as Color[], roofs: [] as Color[] }));
+    const plaster = [0xf4f1ea, 0xefe3c8, 0xe9dcc0, 0xf1e6d2, 0xe3d7c2, 0xf3e9cf, 0xeadbd0];
+    const tiles = [0xb5532e, 0xc0643a, 0xa84a2a, 0xc87146, 0x9e4a2e, 0xb8603c];
+    const villages: Village[] = [];
+    const islands = this.terrain.islandDefs();
+    islands.forEach((island, index) => {
+      const wanted = island.airport ? 26 : island.radius > 600 ? 14 : 5;
       let cx = island.x;
       let cz = island.z;
-      for (let tries = 0; tries < 50; tries++) {
+      for (let tries = 0; tries < 60; tries++) {
         const [x, z] = this.pointOn(island, rand, 0.6);
         const h = this.terrain.heightAt(x, z);
-        if (h > 4 && h < 120 && !this.nearAirport(x, z)) {
+        if (h > 4 && h < 120 && this.slopeAt(x, z) < 0.2 && !this.nearAirport(x, z)) {
           cx = x;
           cz = z;
           break;
         }
       }
-      let built = 0;
-      for (let tries = 0; tries < 200 && built < wanted; tries++) {
-        const x = cx + (rand() - 0.5) * 300;
-        const z = cz + (rand() - 0.5) * 300;
-        const y = this.terrain.heightAt(x, z);
-        if (y < 2.5 || y > 150 || this.slopeAt(x, z) > 0.3 || this.nearAirport(x, z)) continue;
-        spots.push({ x, z, y, w: 8 + rand() * 6, h: 6 + rand() * 5, turn: Math.floor(rand() * 4) * (Math.PI / 2) });
-        built++;
+      const village: Village = { x: cx, z: cz, island: index, houses: [] };
+      villages.push(village);
+      const streets = rand() * Math.PI;
+      for (let tries = 0; tries < 400 && village.houses.length < wanted; tries++) {
+        const along = (rand() + rand() + rand() - 1.5) * 120;
+        const across = (rand() + rand() + rand() - 1.5) * 90;
+        const x = cx + along * Math.cos(streets) - across * Math.sin(streets);
+        const z = cz + along * Math.sin(streets) + across * Math.cos(streets);
+        if (village.houses.some((h) => Math.hypot(h.x - x, h.z - z) < 13)) continue;
+        const kind = rand() < 0.3 ? 0 : rand() < 0.75 ? 1 : 2;
+        const t = templates[kind];
+        const turn = streets + (rand() < 0.5 ? 0 : Math.PI / 2) + (rand() - 0.5) * 0.12;
+        // The lowest corner sets the floor, so on a slope the house is dug in rather than floating.
+        const corners = [-1, 1].flatMap((sx) =>
+          [-1, 1].map((sz) => this.terrain.heightAt(x + (sx * t.width * Math.cos(turn) + sz * t.depth * Math.sin(turn)) / 2, z + (-sx * t.width * Math.sin(turn) + sz * t.depth * Math.cos(turn)) / 2)),
+        );
+        const low = Math.min(...corners);
+        if (low < 2.5 || Math.max(...corners) - low > 2.5 || this.nearAirport(x, z)) continue;
+        placed[kind].matrices.push(new Matrix4().compose(new Vector3(x, low - 0.15, z), yRotation(turn), new Vector3(1, 1, 1)));
+        placed[kind].walls.push(new Color(plaster[Math.floor(rand() * plaster.length)]));
+        placed[kind].roofs.push(new Color(tiles[Math.floor(rand() * tiles.length)]));
+        village.houses.push({ x, z });
       }
-    }
-
-    // The walls' material gets a warm glow at night, like lit windows.
-    const walls = new InstancedMesh(new BoxGeometry(1, 1, 1).translate(0, 0.5, 0), this.windowsMaterial, spots.length);
-    const roofs = new InstancedMesh(
-      new ConeGeometry(0.75, 0.6, 4).rotateY(Math.PI / 4).translate(0, 1.3, 0),
-      new MeshStandardMaterial({ color: 0xc0392b, flatShading: true }),
-      spots.length,
-    );
-    const m = new Matrix4();
-    const color = new Color();
-    spots.forEach((s, i) => {
-      // Sunk a little so houses on gentle slopes don't float.
-      m.compose(new Vector3(s.x, s.y - 1, s.z), yRotation(s.turn), new Vector3(s.w, s.h, s.w));
-      walls.setMatrixAt(i, m);
-      roofs.setMatrixAt(i, m);
-      walls.setColorAt(i, color.setHex(wallColors[i % wallColors.length]));
+      if (village.houses.length >= 12) this.addBellTower(village, rand);
     });
-    this.scene.add(walls, roofs);
+
+    // The walls' material is the world's window material: its glow (lit windows) is turned up at night.
+    const wall = houseWall();
+    Object.assign(this.windowsMaterial, { map: wall.map, emissiveMap: wall.glow, flatShading: false, roughness: 0.92 });
+    this.windowsMaterial.needsUpdate = true;
+    const roof = new MeshStandardMaterial({ map: roofTiles(), roughness: 0.85, side: DoubleSide });
+    templates.forEach((template, kind) => {
+      const { matrices, walls, roofs } = placed[kind];
+      const wallMesh = new InstancedMesh(template.walls, this.windowsMaterial, matrices.length);
+      const roofMesh = new InstancedMesh(template.roof, roof, matrices.length);
+      matrices.forEach((matrix, i) => {
+        wallMesh.setMatrixAt(i, matrix);
+        roofMesh.setMatrixAt(i, matrix);
+        wallMesh.setColorAt(i, walls[i]);
+        roofMesh.setColorAt(i, roofs[i]);
+      });
+      for (const mesh of [wallMesh, roofMesh]) {
+        mesh.castShadow = mesh.receiveShadow = true;
+        this.scene.add(mesh);
+      }
+    });
+    return villages;
+  }
+
+  /**
+   * Dry-stone walls (suhozidi) around the fields outside each village: lines of piled stone on a loose
+   * grid turned the same way as the village, with gaps here and there.
+   */
+  private addStoneWalls(rand: () => number, villages: Village[]): void {
+    const m = new Matrix4();
+    const stone = stoneBlocks();
+    stone.repeat.set(2, 0.5);
+    const material = new MeshStandardMaterial({ map: stone, color: 0x8f877c, roughness: 1 });
+    const piece = new BoxGeometry(WALL_PIECE + 0.2, 1, 0.7).translate(0, 0.5, 0);
+    for (const village of villages) {
+      if (village.houses.length < 5) continue;
+      const pieces: Matrix4[] = [];
+      const turn = rand() * Math.PI;
+      const [cos, sin] = [Math.cos(turn), Math.sin(turn)];
+      const reach = village.houses.length > 12 ? 420 : 260;
+      for (const along of [true, false]) {
+        for (let line = -reach; line <= reach; line += 45 + rand() * 25) {
+          for (let t = -reach; t <= reach; t += WALL_PIECE) {
+            const u = along ? t : line;
+            const v = along ? line : t;
+            const r = Math.hypot(u, v);
+            // Fields ring the village (not inside it), fading out irregularly; runs of wall have gaps.
+            if (r < 110 || r > reach * (0.75 + 0.25 * noise2(u / 90, v / 90, 61))) continue;
+            if (noise2((along ? t : line) / 35, (along ? line : t) / 35 + (along ? 0 : 50), 62) < -0.35) continue;
+            const x = village.x + u * cos - v * sin;
+            const z = village.z + u * sin + v * cos;
+            const h = this.terrain.heightAt(x, z);
+            if (h < 3 || this.slopeAt(x, z) > 0.35 || this.nearAirport(x, z)) continue;
+            if (village.houses.some((house) => Math.hypot(house.x - x, house.z - z) < 9)) continue;
+            m.compose(new Vector3(x, h - 0.1, z), yRotation(-turn + (along ? 0 : Math.PI / 2)), new Vector3(1, 0.8 + rand() * 0.4, 1));
+            pieces.push(m.clone());
+          }
+        }
+      }
+      const mesh = new InstancedMesh(piece, material, pieces.length);
+      pieces.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
+      mesh.computeBoundingSphere();
+      mesh.receiveShadow = true;
+      this.stoneWalls.push({ mesh, x: village.x, z: village.z });
+      this.scene.add(mesh);
+    }
+  }
+
+  /** A Dalmatian campanile: a tall stone tower with arched openings for the bells and a pyramid roof. */
+  private addBellTower(village: Village, rand: () => number): void {
+    for (let tries = 0; tries < 40; tries++) {
+      const x = village.x + (rand() - 0.5) * 60;
+      const z = village.z + (rand() - 0.5) * 60;
+      if (village.houses.some((h) => Math.hypot(h.x - x, h.z - z) < 9)) continue;
+      const y = this.terrain.heightAt(x, z) - 0.3;
+      const stone = stoneBlocks();
+      stone.repeat.set(1, 4);
+      const tower = new Group();
+      const shaft = new Mesh(new BoxGeometry(3.6, 17, 3.6).translate(0, 8.5, 0), new MeshStandardMaterial({ map: stone, roughness: 0.9 }));
+      const bells = new Mesh(new BoxGeometry(3.9, 3.6, 3.9).translate(0, 18.8, 0), new MeshStandardMaterial({ map: belfry(), roughness: 0.9 }));
+      const roof = new Mesh(
+        new ConeGeometry(3.2, 3.6, 4).rotateY(Math.PI / 4).translate(0, 22.4, 0),
+        new MeshStandardMaterial({ color: 0xb0583a, roughness: 0.85, flatShading: true }),
+      );
+      tower.add(shaft, bells, roof);
+      tower.position.set(x, y, z);
+      tower.rotation.y = rand() * Math.PI;
+      tower.traverse((o) => (o.castShadow = o.receiveShadow = true));
+      village.houses.push({ x, z });
+      this.scene.add(tower);
+      return;
+    }
   }
 
   private addLighthouses(): void {
