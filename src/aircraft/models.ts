@@ -1,5 +1,7 @@
 import {
+  AdditiveBlending,
   BoxGeometry,
+  ConeGeometry,
   BufferGeometry,
   CanvasTexture,
   CircleGeometry,
@@ -52,6 +54,7 @@ class Parts implements AircraftModel {
   readonly propellers: Propeller[] = [];
   readonly gear = new Group();
   readonly surfaces: ControlSurfaces = { ailerons: { left: [], right: [] }, elevators: [], rudders: [], flaps: [] };
+  afterburner?: Object3D;
   private readonly statics: Mesh[] = [];
 
   constructor() {
@@ -445,6 +448,128 @@ function jet(): AircraftModel {
   }
 
   p.navLights(new Vector3(5.05, -0.28, 2.7), new Vector3(0, 2.15, 4.4));
+  return p.finish();
+}
+
+export function buildFighter(_airline?: Airline, distant = false): AircraftModel {
+  return withDetail(distant ? 0.5 : 1, fighter);
+}
+
+/**
+ * A light fighter: a long pointed nose, a bubble canopy far forward, the air intake under the
+ * belly, a cropped delta wing blending into the body, one tall fin and an afterburner nozzle;
+ * in two shades of grey camouflage. The gun fires from beside the cockpit.
+ */
+function fighter(): AircraftModel {
+  const p = new Parts();
+  const light = paint(0x8a939b, 0.55, 0.15);
+  const dark = paint(0x5f6870, 0.55, 0.15);
+  const grey = darkGrey();
+  const nozzle = paint(0x4b4f55, 0.4, 0.7);
+
+  const fuselage: Section[] = [
+    { z: -8.4, w: 0.02, h: 0.02, y: -0.02 },
+    { z: -7.8, w: 0.24, h: 0.24, y: -0.02 },
+    { z: -6.8, w: 0.46, h: 0.48, y: 0 },
+    { z: -5.4, w: 0.6, h: 0.66, y: 0.06 },
+    { z: -3.8, w: 0.72, h: 0.76, y: 0.1 },
+    { z: -2.0, w: 0.92, h: 0.76, y: 0.06 },
+    { z: 0.2, w: 1.0, h: 0.74, y: 0.04 },
+    { z: 2.6, w: 0.92, h: 0.7, y: 0.04 },
+    { z: 4.6, w: 0.7, h: 0.62, y: 0.02 },
+    { z: 5.7, w: 0.56, h: 0.55, y: 0 },
+  ];
+  p.body(fuselage, light);
+  // Camouflage: a darker band over the back, from behind the canopy to the tail.
+  p.body(fuselage, dark, { from: 0.5, to: Math.PI - 0.5, grow: 1.02, between: [-3.8, 5.7] });
+  p.add(body(fuselage, { segments: 20, steps: 2, between: [-8.4, -7.0] }), paint(0x3f454b, 0.4, 0.2)); // dark radome tip
+  p.body(
+    [
+      { z: 5.65, w: 0.54, h: 0.53 },
+      { z: 6.3, w: 0.5, h: 0.5 },
+      { z: 6.7, w: 0.47, h: 0.47 },
+    ],
+    nozzle,
+    { steps: 1 },
+  );
+  const glow = p.add(new CircleGeometry(0.4, 16), new MeshBasicMaterial({ color: 0xffa94d }), 0, 0, 6.72);
+  glow.castShadow = false;
+  p.rod(new Vector3(0, -0.02, -8.35), new Vector3(0, -0.02, -9.0), 0.02, metal()); // pitot tube
+
+  // Bubble canopy far forward, and the pilot.
+  const canopy = p.add(new SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), canopyGlass(), 0, 0.66, -4.4);
+  canopy.scale.set(0.5, 0.56, 1.75);
+  p.add(new TorusGeometry(0.5, 0.03, 6, 20, Math.PI), grey, 0, 0.66, -3.5);
+  pilot(p, 0, 0.82, -4.3, 0x4f5d2f);
+
+  // The air intake under the belly.
+  const intake = body(
+    [
+      { z: -3.7, w: 0.56, h: 0.4 },
+      { z: -2.8, w: 0.6, h: 0.44 },
+      { z: -0.5, w: 0.56, h: 0.4 },
+      { z: 1.2, w: 0.3, h: 0.22 },
+      { z: 2.2, w: 0.05, h: 0.05 },
+    ],
+    { segments: 18, steps: 3 },
+  ).translate(0, -0.72, 0);
+  p.add(intake, light);
+  p.add(new CircleGeometry(1, 18).scale(0.5, 0.35, 1).rotateY(Math.PI), paint(0x111316, 0.8), 0, -0.72, -3.72);
+
+  // The gun's muzzle beside the cockpit, on the left.
+  p.add(new CylinderGeometry(0.07, 0.07, 0.5, 8).rotateX(Math.PI / 2), paint(0x1b1d20, 0.5, 0.6), -0.62, 0.32, -3.9);
+
+  // Wing: strakes blending forward into the body, a cropped delta with flaperons, missile rails at the tips.
+  p.wings({ span: 0.55, rootChord: 3.4, tipChord: 0.15, sweep: 3.0, dihedral: 0, thickness: 0.03, root: new Vector3(0.75, 0.0, -4.1) }, [{ s0: 0, s1: 0.55, material: light }]);
+  const wingForm = { span: 4.4, rootChord: 4.6, tipChord: 1.3, sweep: 3.3, dihedral: -0.02, thickness: 0.04, root: new Vector3(0.85, -0.05, -1.2) };
+  const share = 0.82;
+  p.wings(wingForm, [{ s0: 0, s1: 4.4, material: light, tip: true }], share);
+  const [aileronR, aileronL] = p.hinged(wingForm, 2.3, 4.2, share, 0.05, light);
+  p.surfaces.ailerons.right.push(aileronR);
+  p.surfaces.ailerons.left.push(aileronL);
+  p.surfaces.flaps.push(...p.hinged(wingForm, 0.3, 2.2, share, 0.05, light));
+  for (const side of [-1, 1]) p.rod(new Vector3(side * 5.28, -0.1, 1.9), new Vector3(side * 5.28, -0.1, 3.4), 0.06, grey);
+
+  // One tall fin with its rudder.
+  p.fin({ span: 3.1, rootChord: 3.4, tipChord: 1.1, sweep: 2.5, thickness: 0.05, root: new Vector3(0, 0.6, 2.3) }, 0.72, dark, 0.2, 2.7);
+
+  // All-moving tailplanes, drooping a little.
+  for (const side of [-1, 1] as const) {
+    const pivot = new Group();
+    pivot.position.set(side * 1.55, -0.05, 4.9);
+    pivot.rotation.z = side * -0.08;
+    p.object.add(pivot);
+    const half = new Mesh(
+      wing({ span: 2.1, rootChord: 1.8, tipChord: 0.7, sweep: 1.2, dihedral: 0, thickness: 0.04, root: new Vector3(-side * 0.85, 0, -0.7), side }, 0, 2.1, { roundTip: true }),
+      light,
+    );
+    half.castShadow = true;
+    pivot.add(half);
+    p.surfaces.elevators.push(pivot);
+  }
+
+  // The afterburner flame, lit at full power (see Aircraft).
+  const flame = new Group();
+  flame.position.set(0, 0, 6.7);
+  const flameMaterial = new MeshBasicMaterial({ color: 0xff9a3c, transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false, toneMapped: false });
+  flame.add(new Mesh(new ConeGeometry(0.42, 3.2, 16, 1, true).rotateX(Math.PI / 2).translate(0, 0, 1.6), flameMaterial));
+  const core = new Mesh(new ConeGeometry(0.25, 1.6, 12, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.8), new MeshBasicMaterial({ color: 0xbfe4ff, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+  flame.add(core);
+  flame.visible = false;
+  p.object.add(flame);
+  p.afterburner = flame;
+
+  // Retractable gear.
+  const tyre = rubber();
+  const leg = metal();
+  p.rod(new Vector3(0, -0.6, -5.0), new Vector3(0, -1.3, -5.0), 0.06, leg, p.gear);
+  p.wheel(0.3, 0, -1.3, -5.0, tyre, leg);
+  for (const side of [-1, 1]) {
+    p.rod(new Vector3(side * 0.9, -0.5, 0.9), new Vector3(side * 1.15, -1.28, 0.9), 0.07, leg, p.gear);
+    p.wheel(0.34, side * 1.15, -1.26, 0.9, tyre, leg);
+  }
+
+  p.navLights(new Vector3(5.28, -0.1, 2.7), new Vector3(0, 3.65, 5.4));
   return p.finish();
 }
 

@@ -1,7 +1,7 @@
 import { MathUtils, type Group, type Mesh, type MeshBasicMaterial, type BufferGeometry, type Object3D } from 'three';
 import type { AircraftSpec } from '../physics/FlightModel';
 import type { Airline } from './airlines';
-import { buildAirliner, buildJet, buildSeaplane, buildTrainer } from './models';
+import { buildAirliner, buildFighter, buildJet, buildSeaplane, buildTrainer } from './models';
 
 /** Every plane the player can pick: how it flies, its camera, its sound and its model (see models.ts). */
 
@@ -10,6 +10,7 @@ export interface AircraftModel {
   propellers: Propeller[];
   gear: Group; // the wheels and their struts, folded away when retracted
   surfaces: ControlSurfaces;
+  afterburner?: Object3D; // a fighter's flame, lit at full power
 }
 
 /** A propeller: the blades spin around the group's Z axis; at speed a blurred disc shows instead. */
@@ -41,6 +42,7 @@ export interface AircraftType {
   camera: { distance: number; height: number; cockpit: [number, number, number] };
   liveries?: boolean; // wears an airline's colours (see airlines.ts)
   exhausts?: [number, number, number][]; // jet engine outlets, where contrails start
+  gun?: [number, number, number]; // where an armed plane's gun fires from
   /** `distant`: a lighter model for planes the player only sees from afar (traffic, parked). */
   build(airline?: Airline, distant?: boolean): AircraftModel;
 }
@@ -102,6 +104,37 @@ export const AIRCRAFT: AircraftType[] = [
       bellyHeight: 0.75,
     },
     build: buildJet,
+  },
+  {
+    id: 'fighter',
+    name: 'Lovac',
+    emoji: '🛩️',
+    description: 'Vojni avion, brži od zvuka! Ima mitraljez.',
+    engine: 'jet',
+    camera: { distance: 17, height: 5, cockpit: [0, 1.2, -4.9] },
+    exhausts: [[0, 0, 6.7]],
+    gun: [-0.62, 0.32, -4.2],
+    spec: {
+      maxThrust: 22,
+      maxSpeed: 360, // m/s, just over the speed of sound with the afterburner
+      stallSpeed: 62,
+      rotateSpeed: 74,
+      pitchRate: 1.6,
+      rollRate: 4,
+      yawRate: 0.5,
+      groundSteerRate: 0.6,
+      turnRate: 1.4,
+      gearHeight: 1.6,
+      wingspan: 10.6,
+      maxLoad: 9,
+      endurance: 420, // the afterburner drinks fuel
+      glideRatio: 8,
+      propeller: false,
+      floats: false,
+      retractableGear: true,
+      bellyHeight: 0.95,
+    },
+    build: buildFighter,
   },
   {
     id: 'seaplane',

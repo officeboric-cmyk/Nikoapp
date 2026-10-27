@@ -12,6 +12,7 @@ export const CAMERA_NAMES: Record<CameraMode, string> = {
 const MODES: CameraMode[] = ['chase', 'cockpit', 'side'];
 const LOOK_AHEAD = 10; // m in front of the plane
 const STIFFNESS = 4; // higher = camera follows more tightly
+const CARRY = 0.85; // share of the plane's motion the camera moves with straight away
 const MIN_CLEARANCE = 2; // m, never dip into hills or the sea
 const NEAR = { outside: 0.5, cockpit: 0.15 }; // m, the cockpit view needs a closer near plane
 const FOV = { outside: 65, cockpit: 75 }; // degrees, a wider view from the cockpit
@@ -58,6 +59,9 @@ export class CameraRig {
   }
 
   update(model: FlightModel, dt: number): void {
+    // Carried along with the plane first, so it doesn't fall behind at high speed (a fighter's 1200 km/h);
+    // a little lag is kept so speeding up still feels like it.
+    if (this.mode !== 'cockpit') this.camera.position.addScaledVector(model.velocity, CARRY * dt);
     this.place(model, 1 - Math.exp(-STIFFNESS * dt));
   }
 

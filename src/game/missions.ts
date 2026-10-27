@@ -16,7 +16,9 @@ export type Goal =
   /** Put out `fires` forest fires on an island with water scooped from the sea (seaplane). */
   | { kind: 'fire'; island: string; fires: number; par: number }
   /** Drop a parcel on a parachute onto a target on each of these islands. */
-  | { kind: 'parcels'; islands: string[]; par: number };
+  | { kind: 'parcels'; islands: string[]; par: number }
+  /** Shoot down `count` target balloons around an island with the gun (fighter). */
+  | { kind: 'balloons'; around: string; count: number; par: number };
 
 export interface MissionDef {
   id: string;
@@ -150,6 +152,15 @@ export const MISSIONS: MissionDef[] = [
     aircraft: 'trainer',
     start: 'Zeleni otok',
     goal: { kind: 'parcels', islands: ['Otok dupina', 'Kameni otok', 'Gusarski otok'], par: 480 },
+  },
+  {
+    id: 'balloons',
+    emoji: '🎈',
+    title: 'Gađanje balona',
+    brief: 'Lovcem do Kamenog otoka! Mitraljezom (X / Razmak ili 🔫) pogodi svih 12 balona. Nišan ⊕ pokazuje kamo idu meci.',
+    aircraft: 'fighter',
+    start: 'Zeleni otok',
+    goal: { kind: 'balloons', around: 'Kameni otok', count: 12, par: 150 },
   },
 ];
 

@@ -6,13 +6,19 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - **6 aerodroma**: asfaltna pista s pravim oznakama (brojevi, rubne crte, zona i točka dodira), betonska
   stajanka sa žutim linijama, kontrolni toranj, hangar od lima, terminal sa staklenom fasadom i imenom
   otoka, spremnici i cisterna goriva, reflektori, parkiralište s autima, parkirani avioni i vjetrokaz
-- **4 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!) i Putnički avion
+- **5 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!), Putnički avion i **Lovac** – vojni avion
+  brži od zvuka (do ~1300 km/h s dodatnim izgaranjem, pa prasak i oblak pare kad probije zvučni zid), s
+  **mitraljezom**: tragajući meci, nišan ⊕, 600 metaka koji se pune na aerodromu. Gađaju se baloni-mete
+  (u slobodnom letu oko otoka s kojeg kreneš); drugi avioni i kuće ne mogu se pogoditi
+- 🤖 **autopilot** (`T` ili 🤖): drži visinu, smjer i brzinu (sam vodi gas), u misijama vodi do cilja i
+  penje se preko brda na putu; isključi se čim pomakneš palicu ili gas
 - **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
 - **🎓 škola letenja**: 5 lekcija korak po korak (polijetanje, zaokreti, gore i dolje, zakrilca, slijetanje),
   uz savjet što pritisnuti i zvjezdice
-- **13 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima,
-  gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧) i
-  paketi s padobranom na mete na tri otoka (`B` ili 📦; plavi krug pokazuje gdje bi pao)
+- **14 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima,
+  gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧),
+  paketi s padobranom na mete na tri otoka (`B` ili 📦; plavi krug pokazuje gdje bi pao) i gađanje
+  12 balona lovcem oko Kamenog otoka
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
 - ⛽ **gorivo** (u normalnom i realističnom načinu): troši se više uz više gasa, upozorenje na 25 % i 10 %,
   bez goriva motor stane i avion kliži; stani bilo gdje na aerodromu i rezervoar se napuni
@@ -20,7 +26,7 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
   svaki metar spuštanja, hidroavion ~8 (plovci koče), mlažnjak ~11, putnički ~17; najdalje kod ~1,4×
   brzine gubitka uzgona. Propeler koji se vrti na vjetru koči više od ugašenog mlaznog motora, a izvučeni
   kotači i zakrilca klizanje skraćuju. U normalnom načinu pomoćnik sam drži najbolju brzinu klizanja
-- 🏅 **18 znački** (prvi let, 100 slijetanja, svi aerodromi, looping, valjak, iznad oblaka, noćni pilot,
+- 🏅 **20 znački** (prvi let, 100 slijetanja, svi aerodromi, looping, valjak, iznad oblaka, noćni pilot,
   vatrogasac, diploma škole…) i **rekordi** (najveća visina i brzina, najmekše slijetanje, preletjeni km)
 - 👧👦 **više pilota** na istom uređaju: svaki ima svoje ime, zvjezdice, otoke i značke
 - pomoć za slijetanje: **PAPI svjetla** uz svaku pistu (2 bijela + 2 crvena = dobar prilaz, sva bijela =
@@ -67,7 +73,9 @@ npm run preview  # pokreće gotovi build
 | `S` `↓` / `W` `↑` | nos gore / dolje (kao palica u avionu: prema sebi = gore) |
 | `A` `←` / `D` `→` | nagib lijevo / desno (na pisti: skretanje) |
 | `Q` / `E` | kormilo |
-| `Razmak` | kočnica |
+| `Razmak` | kočnica (u zraku s lovcem: mitraljez) |
+| `X` | mitraljez (lovac) |
+| `T` | autopilot uključi / isključi |
 | `V` | zakrilca: 0 → pola → puno (sporije letiš, lakše slijetaš) |
 | `G` | uvlačenje / izvlačenje kotača (mlažnjak i putnički avion) |
 | `B` | baci (u misijama: voda na vatru ili paket s padobranom) |
@@ -91,12 +99,13 @@ izvući kotače, avion klizne po trbuhu i vrati se na početak.
 | lijeva gljiva | palica (prema sebi = nos gore, lijevo/desno = nagib) |
 | `RT` / `LT` | više / manje gasa |
 | `LB` / `RB` | kormilo |
-| `A` / `✕` | kočnica |
+| `A` / `✕` | kočnica (u zraku s lovcem: mitraljez) |
 | `B` / `○` | zakrilca |
 | `X` / `◻` | kotači |
 | `Y` / `△` | kamera |
 | `Start` / `Back` | pauza / izbornik |
 | križ dolje | baci (misije) |
+| križ gore | autopilot |
 
 ### Na mobitelu i tabletu
 
@@ -118,7 +127,7 @@ src/
   core/Graphics.ts        – iscrtavanje i kvaliteta slike (Brzo / Lijepo: razlučivost, sjene, sjaj)
   core/AutoQuality.ts     – mjeri glatkoću igre i po potrebi sam smanji kvalitetu slike
   physics/FlightModel.ts  – fizika leta (fiksni korak 120 Hz): sile, uzgon, zakrilca, tlo, more, vjetar
-  aircraft/catalog.ts     – 4 aviona: fizika, kamera, zvuk
+  aircraft/catalog.ts     – 5 aviona: fizika, kamera, zvuk
   aircraft/models.ts      – 3D modeli aviona (trup, krila, rep, kotači, propeler, pilot, svjetla)
   aircraft/shapes.ts      – glatki oblici iz presjeka: trup od elipsa, krila od aeroprofila
   aircraft/airlines.ts    – aviokompanije i njihove boje
@@ -132,6 +141,9 @@ src/
   game/Progress.ts        – spremljeni napredak po pilotu (zvjezdice, otoci, rekordi, značke)
   game/badges.ts          – popis znački i kad se dobivaju
   game/FlightLog.ts       – rekordi leta i prepoznavanje loopinga i valjka
+  game/Autopilot.ts       – autopilot: visina, smjer, brzina, do cilja, preko brda
+  game/Gun.ts             – mitraljez lovca: meci, pogoci, udari u tlo i more
+  game/Balloons.ts        – baloni-mete
   world/islands.ts        – popis otoka i aerodroma (lako dodati nove)
   world/Terrain.ts        – visinske mape otoka, "koliko je visoko tlo ovdje?"
   world/groundDetail.ts   – detalji livade u shaderu (suhi i bujni dijelovi, zrnatost izbliza)

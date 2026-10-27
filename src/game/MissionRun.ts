@@ -25,6 +25,7 @@ import type { Effects } from '../world/Effects';
 import { mulberry32 } from '../world/noise';
 import type { Terrain } from '../world/Terrain';
 import type { LandingResult } from './landing';
+import { Balloons } from './Balloons';
 import { formatTime, timeStars, type Goal, type MissionDef } from './missions';
 
 const tmpV = new Vector3();
@@ -107,6 +108,8 @@ export class MissionRun {
   private readonly targets: DropTarget[] = [];
   private readonly parcels: Parcel[] = [];
   private lastDrop = -Infinity;
+  /** Balloon mission: the targets the gun shoots at (see Gun). */
+  readonly balloons?: Balloons;
 
   constructor(
     readonly def: MissionDef,
@@ -125,6 +128,10 @@ export class MissionRun {
     if (goal.kind === 'rings') this.buildRings(goal);
     if (goal.kind === 'splashdown' && goal.boat) this.buildBoat(goal.x, goal.z);
     if (goal.kind === 'parcels') this.buildTargets(goal);
+    if (goal.kind === 'balloons' && effects) {
+      const island = ISLANDS.find((i) => i.name === goal.around)!;
+      this.balloons = new Balloons(scene, effects, terrain, island.x, island.z, goal.count, island.radius + 900, 77);
+    }
     if (goal.kind === 'fire' || goal.kind === 'parcels') {
       if (goal.kind === 'fire') this.buildFires(goal);
       this.aim = new Mesh(
@@ -156,11 +163,22 @@ export class MissionRun {
     for (const parcel of this.parcels) this.group.remove(parcel.object);
     this.parcels.length = 0;
     this.lastDrop = -Infinity;
+    this.balloons?.reset();
     this.refreshVisuals();
   }
 
   dispose(): void {
     this.scene.remove(this.group);
+    this.balloons?.dispose();
+  }
+
+  /** Balloons the gun burst this step: progress, or the end of the mission. */
+  onBurst(count: number): MissionUpdate | null {
+    const goal = this.goal;
+    if (this.finished || goal.kind !== 'balloons' || !this.balloons || count === 0) return null;
+    const hit = this.balloons.total - this.balloons.left;
+    if (this.balloons.left === 0) return this.finish(timeStars(this.elapsed, goal.par), `Vrijeme: ${formatTime(this.elapsed)}`);
+    return { message: `🎈 Pogodak! (${hit}/${goal.count})` };
   }
 
   /** The line shown with the arrow, e.g. "🎯 Prsten 3/8". */
@@ -180,6 +198,8 @@ export class MissionRun {
         return `🔥 ${this.firesOut}/${goal.fires} · 💧 ${Math.round(this.water * 100)} %${time}`;
       case 'parcels':
         return `📦 Mete ${this.targets.filter((t) => t.hit).length}/${this.targets.length}${time}`;
+      case 'balloons':
+        return `🎈 Baloni ${this.balloons ? this.balloons.total - this.balloons.left : 0}/${goal.count}${time}`;
     }
   }
 
@@ -212,6 +232,7 @@ export class MissionRun {
     this.elapsed += dt;
     const goal = this.goal;
     this.placeBeacon(model.position);
+    this.balloons?.update(dt);
     if (this.boat) this.boat.position.y = SEA_LEVEL + Math.sin(this.elapsed * 1.5) * 0.25;
 
     if (goal.kind === 'rings') {
@@ -484,6 +505,10 @@ export class MissionRun {
           if (!best || fire.position.distanceTo(from) < best.position.distanceTo(from)) best = fire;
         }
         return best ? { x: best.position.x, z: best.position.z } : null;
+      }
+      case 'balloons': {
+        const best = this.balloons?.nearest(from);
+        return best ? { x: best.x, z: best.z } : null;
       }
       case 'tour': {
         // The nearest island still to visit.

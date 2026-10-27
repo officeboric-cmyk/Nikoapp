@@ -28,6 +28,10 @@
           <span class="value" id="hud-fuel">100</span>
           <span class="caption">% goriva</span>
         </div>
+        <div class="cell hidden" id="hud-ammo-gauge">
+          <span class="value" id="hud-ammo">600</span>
+          <span class="caption">metaka</span>
+        </div>
         <div class="cell hidden" id="hud-flaps-gauge">
           <span class="value" id="hud-flaps">🛬</span>
           <span class="caption" id="hud-flaps-text">zakrilca</span>
@@ -46,6 +50,7 @@
 
       <div id="top-buttons">
         <button id="pause-btn" class="round-btn touch-only" type="button" aria-label="Pauza">⏸</button>
+        <button id="ap-btn" class="round-btn" type="button" aria-label="Autopilot" title="Autopilot (T)">🤖</button>
         <button id="flaps-btn" class="round-btn" type="button" aria-label="Zakrilca">🛬</button>
         <button id="gear-btn" class="round-btn hidden" type="button" aria-label="Kotači">🛞</button>
         <button id="drop-btn" class="round-btn hidden" type="button" aria-label="Baci vodu">💧</button>
@@ -55,6 +60,7 @@
     </div>
 
     <div id="message"></div>
+    <div id="gunsight" class="hidden"></div>
 
     <div id="help">
       <h2>Kako letjeti</h2>
@@ -64,13 +70,14 @@
         <li><kbd>A</kbd> / <kbd>←</kbd> lijevo &nbsp; <kbd>D</kbd> / <kbd>→</kbd> desno</li>
         <li><kbd>Q</kbd> / <kbd>E</kbd> kormilo</li>
         <li><kbd>Razmak</kbd> kočnica &nbsp; <kbd>G</kbd> kotači &nbsp; <kbd>V</kbd> zakrilca</li>
-        <li><kbd>N</kbd> ispočetka &nbsp; <kbd>P</kbd> pauza &nbsp; <kbd>B</kbd> baci (u misijama)</li>
+        <li id="help-gun" class="hidden"><kbd>X</kbd> / <kbd>Razmak</kbd> mitraljez (u zraku)</li>
+        <li><kbd>T</kbd> autopilot &nbsp; <kbd>N</kbd> ispočetka &nbsp; <kbd>P</kbd> pauza &nbsp; <kbd>B</kbd> baci (u misijama)</li>
         <li><kbd>M</kbd> zvuk &nbsp; <kbd>C</kbd> kamera &nbsp; <kbd>H</kbd> pomoć &nbsp; <kbd>Esc</kbd> izbornik</li>
       </ul>
       <ul class="touch-only">
         <li>Lijevo: povuci <b>GAS</b> prema gore</li>
         <li id="help-stick"></li>
-        <li><b>STOP</b> koči &nbsp; 🛬 zakrilca &nbsp; 🛞 kotači &nbsp; 🎥 kamera &nbsp; 💧 baci</li>
+        <li><b>STOP</b> koči &nbsp; 🤖 autopilot &nbsp; 🛬 zakrilca &nbsp; 🛞 kotači &nbsp; 🎥 kamera &nbsp; 💧 baci</li>
       </ul>
       <p class="hint">Daj gas, ubrzaj po pisti i povuci nos gore!</p>
     </div>
@@ -85,6 +92,7 @@
         <span>GAS</span>
       </div>
       <button id="touch-brake" type="button">STOP</button>
+      <button id="touch-fire" class="hidden" type="button" aria-label="Pucaj">🔫<span>PALI</span></button>
       <div id="touch-stick"><div id="touch-knob"></div></div>
       <button id="tilt-center" type="button" aria-label="Ravno">⟳<span>Ravno</span></button>
     </div>

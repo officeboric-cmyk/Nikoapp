@@ -10,17 +10,19 @@ export interface Controls {
 
 // Keys whose default browser behaviour (scrolling) we don't want while flying.
 const BLOCKED = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
+/** The gamepad's A / ✕: the brake on the ground, the gun's trigger in the air. */
+export const PAD_A = 0;
 
 const KEY_RAMP = 5; // per second: a key moves the stick from centre to full in 0.2 s, not instantly
 const PAD_DEADZONE = 0.12;
 
 /**
  * Gamepad buttons (standard layout, e.g. Xbox / PlayStation) act like these keys, so the game
- * only has to listen for keys: X / ◻ wheels, Y / △ camera, B / ○ flaps, d-pad down drop (missions),
+ * only has to listen for keys: X / ◻ wheels, Y / △ camera, B / ○ flaps, d-pad up autopilot, d-pad down drop (missions),
  * Start pause, Back menu.
  */
-const PAD_BUTTONS: Record<number, string> = { 1: 'KeyV', 2: 'KeyG', 3: 'KeyC', 8: 'Escape', 9: 'KeyP', 13: 'KeyB' };
-const PAD_BRAKE = 0; // A / ✕
+const PAD_BUTTONS: Record<number, string> = { 1: 'KeyV', 2: 'KeyG', 3: 'KeyC', 8: 'Escape', 9: 'KeyP', 12: 'KeyT', 13: 'KeyB' };
+const PAD_BRAKE = PAD_A;
 const PAD_GAS_DOWN = 6; // left trigger
 const PAD_GAS_UP = 7; // right trigger
 const PAD_RUDDER_LEFT = 4; // left bumper
@@ -98,6 +100,16 @@ export class Input {
       controls.brake ||= pad.buttons[PAD_BRAKE]?.pressed ?? false;
     }
     return controls;
+  }
+
+  /** True while the key is held down. */
+  isHeld(code: string): boolean {
+    return this.held.has(code);
+  }
+
+  /** True while the gamepad button (standard layout index) is held down. */
+  padHeld(button: number): boolean {
+    return this.gamepad()?.buttons[button]?.pressed ?? false;
   }
 
   /** True once per key press (or gamepad button press); cleared by endFrame(). */

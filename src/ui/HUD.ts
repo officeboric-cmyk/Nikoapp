@@ -22,6 +22,8 @@ export class HUD {
   private readonly flapsText = el('hud-flaps-text');
   private readonly fuelGauge = el('hud-fuel-gauge');
   private readonly fuelText = el('hud-fuel');
+  private readonly ammoGauge = el('hud-ammo-gauge');
+  private readonly ammoText = el('hud-ammo');
 
   private flashText = '';
   private flashWarn = false;
@@ -61,6 +63,14 @@ export class HUD {
     for (const name of ['down', 'up', 'moving']) this.gearGauge.classList.toggle(name, name === state);
     const icon = state === 'down' ? '⬇' : state === 'up' ? '⬆' : '↕';
     if (this.gearIcon.textContent !== icon) this.gearIcon.textContent = icon;
+  }
+
+  /** Rounds left in an armed plane's gun; null hides the gauge. */
+  setAmmo(rounds: number | null): void {
+    this.ammoGauge.classList.toggle('hidden', rounds === null);
+    this.ammoGauge.classList.toggle('empty', rounds === 0);
+    const text = String(rounds ?? 0);
+    if (this.ammoText.textContent !== text) this.ammoText.textContent = text;
   }
 
   /** The tank, in percent (not in arcade, where it never runs dry); orange when low, red when nearly empty. */

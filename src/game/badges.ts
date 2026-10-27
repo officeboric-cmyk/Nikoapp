@@ -26,6 +26,8 @@ export const BADGES: Badge[] = [
   { id: 'distance', emoji: '🧭', title: 'Dugi put', description: 'Preleti ukupno 100 km', earned: (p) => p.stats.distance >= 100 },
   { id: 'water', emoji: '🌊', title: 'Na vodi', description: 'Sleti hidroavionom na more', earned: (p) => p.stats.waterLandings >= 1 },
   { id: 'night', emoji: '🌙', title: 'Noćni pilot', description: 'Sleti noću', earned: (p) => p.stats.nightLandings >= 1 },
+  { id: 'supersonic', emoji: '💥', title: 'Brži od zvuka', description: 'Probij zvučni zid lovcem', earned: (p) => p.stats.supersonic >= 1 },
+  { id: 'sharpshooter', emoji: '🎈', title: 'Strijelac', description: 'Pogodi 50 balona', earned: (p) => p.stats.balloons >= 50 },
   { id: 'firefighter', emoji: '🚒', title: 'Vatrogasac', description: 'Ugasi požar na Borovom otoku', earned: (p) => p.missionStars('fire-pine') >= 1 },
   { id: 'school', emoji: '🎓', title: 'Diploma', description: 'Završi sve lekcije škole letenja', earned: (p, all) => all.lessons.every((id) => p.missionStars(id) >= 1) },
   { id: 'missions', emoji: '🎖️', title: 'Sve misije', description: 'Završi svaku misiju', earned: (p, all) => all.missions.every((id) => p.missionStars(id) >= 1) },

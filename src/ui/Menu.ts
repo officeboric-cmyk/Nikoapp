@@ -313,6 +313,7 @@ export class Menu {
       ['⚡ Najveća brzina', `${Math.round(s.maxSpeed)} km/h`],
       ['🧭 Ukupno preletio', `${s.distance.toFixed(1).replace('.', ',')} km`],
       ['🔄 Loopinga / 🌀 valjaka', `${s.loops} / ${s.rolls}`],
+      ['🎈 Pogođenih balona', `${s.balloons}`],
     ];
     const records = document.getElementById('menu-records')!;
     records.replaceChildren(

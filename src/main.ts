@@ -1,4 +1,4 @@
-import { Color, PerspectiveCamera, Scene, Timer } from 'three';
+import { Color, PerspectiveCamera, Scene, Timer, Vector3 } from 'three';
 import { Aircraft } from './aircraft/Aircraft';
 import { airlineById } from './aircraft/airlines';
 import { AIRCRAFT } from './aircraft/catalog';
@@ -7,8 +7,11 @@ import { Sound } from './audio/Sound';
 import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
 import { AutoQuality } from './core/AutoQuality';
 import { Graphics } from './core/Graphics';
-import { Input } from './core/Input';
+import { Input, PAD_A } from './core/Input';
+import { Autopilot, type AutopilotRefusal } from './game/Autopilot';
+import { Balloons } from './game/Balloons';
 import { newBadges } from './game/badges';
+import { AMMO, Gun } from './game/Gun';
 import { collision, planeAhead } from './game/collisions';
 import { FlightLog } from './game/FlightLog';
 import { hillAhead } from './game/hillWarning';
@@ -57,6 +60,20 @@ radio.muted = sound.isMuted;
 /** Calls from the tower waiting to be made a little later (so they don't cover the start message). */
 const pendingCalls: { at: number; kind: string; text: string }[] = [];
 const flightLog = new FlightLog();
+const autopilot = new Autopilot();
+const autopilotButton = document.getElementById('ap-btn')!;
+/** The fighter's gun, its trigger on screen, its sight, and balloons to practise on in free flight. */
+let gun: Gun | null = null;
+let practice: Balloons | null = null;
+let practiceBackAt = Infinity;
+let touchFiring = false;
+let outOfAmmoSaid = false;
+let supersonic = false;
+const SPEED_OF_SOUND = 343; // m/s
+const SIGHT_RANGE = 600; // m ahead where the gunsight shows the rounds arriving
+const fireButton = document.getElementById('touch-fire')!;
+const gunsight = document.getElementById('gunsight')!;
+const sightPoint = new Vector3();
 const autoQuality = new AutoQuality();
 const REFUEL_RANGE = 900; // m from an airport's middle where a stopped plane is filled up
 const REFUEL_BELOW = 0.98; // a tank fuller than this isn't topped up
@@ -100,6 +117,11 @@ const gearButton = document.getElementById('gear-btn')!;
 function startFreeFlight(picked: Choice): void {
   endMission();
   begin(picked);
+  if (gun) {
+    // Something to aim at: target balloons around the island you start from.
+    const island = ISLANDS.find((i) => i.name === picked.airport.name)!;
+    practice = new Balloons(scene, effects, terrain, island.x, island.z, 14, island.radius + 900, 5);
+  }
   const who = picked.aircraft.liveries ? `${picked.aircraft.name} ${picked.airline.name}` : picked.aircraft.name;
   hud.flash(`${who} je spreman! ${say('Drži R za gas', 'Povuci GAS gore')} 🚀`, timer.getElapsed(), 3);
 }
@@ -166,6 +188,9 @@ function setEnvironment(time: TimeOfDay, weather: Weather): void {
 function endMission(): void {
   mission?.dispose();
   mission = null;
+  practice?.dispose();
+  practice = null;
+  practiceBackAt = Infinity;
   dropButton.classList.add('hidden');
   missionDone.classList.add('hidden');
 }
@@ -277,7 +302,11 @@ function setup(picked: Choice): void {
     rig.distance = picked.aircraft.camera.distance;
     rig.height = picked.aircraft.camera.height;
     rig.cockpit.fromArray(picked.aircraft.camera.cockpit);
-    cockpit.setStick(picked.aircraft.id === 'jet');
+    cockpit.setStick(picked.aircraft.id === 'jet' || picked.aircraft.id === 'fighter');
+    gun?.dispose(scene);
+    gun = picked.aircraft.gun ? new Gun(scene, effects, new Vector3(...picked.aircraft.gun)) : null;
+    fireButton.classList.toggle('hidden', !gun);
+    document.getElementById('help-gun')!.classList.toggle('hidden', !gun);
     gearButton.classList.toggle('hidden', !picked.aircraft.spec.retractableGear);
     sound.setEngine(picked.aircraft.engine);
     effects.setExhausts(picked.aircraft.exhausts ?? []);
@@ -294,6 +323,10 @@ function respawn(): void {
   rig.snap(model);
   touch.reset();
   flightLog.reset();
+  setAutopilot(false);
+  gun?.reload();
+  outOfAmmoSaid = false;
+  supersonic = false;
   fuelWarned = 0;
   refuelling = false;
   respawnAt = Infinity;
@@ -371,6 +404,51 @@ gearButton.addEventListener('click', () => {
   if (started && !menu.visible && !paused) toggleGear();
 });
 
+/** Switches the autopilot on (keeping the height, heading and speed of the moment) or off. */
+function toggleAutopilot(): void {
+  const now = timer.getElapsed();
+  if (autopilot.engaged) return setAutopilot(false, '🤖 Autopilot isključen');
+  if (mission instanceof LessonRun) return hud.flash('U školi letiš sam! 🙂', now, 2.5);
+  const ground = Math.max(terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
+  const refusal = autopilot.engage(model, model.position.y - model.spec.gearHeight - ground);
+  if (refusal) {
+    const why: Record<AutopilotRefusal, string> = {
+      ground: 'Autopilot radi samo u zraku — prvo poleti!',
+      low: 'Prenisko za autopilot — popni se iznad 60 m',
+      stall: 'Presporo za autopilot — prvo dodaj gas i spusti nos',
+      engine: 'Bez motora autopilot ne može letjeti',
+    };
+    return hud.flash(`🤖 ${why[refusal]}`, now, 2.5, true);
+  }
+  const target = mission ? currentTarget() : null;
+  setAutopilot(
+    true,
+    target?.x !== undefined
+      ? `🤖 Autopilot vodi do cilja: ${target.name} (pomakni palicu za preuzimanje)`
+      : `🤖 Autopilot drži visinu ${Math.round(model.position.y)} m i brzinu ${Math.round(model.speed * 3.6)} km/h`,
+  );
+}
+
+function setAutopilot(on: boolean, message?: string): void {
+  if (!on) autopilot.disengage();
+  autopilotButton.classList.toggle('on', on);
+  if (message) hud.flash(message, timer.getElapsed(), 3);
+  if (message) sound.gear();
+}
+
+/** The autopilot lets go when it can't fly on, and says when it has brought the plane to the target. */
+function checkAutopilot(now: number): void {
+  if (!autopilot.engaged) return;
+  if (model.crashed || model.onGround) return setAutopilot(false);
+  if (model.stalled) return setAutopilot(false, '🤖 Autopilot isključen: presporo! Spusti nos i dodaj gas');
+  if (!model.engineRunning) return setAutopilot(false, '🤖 Autopilot isključen: nema goriva');
+  if (autopilot.arrived) {
+    autopilot.arrived = false;
+    hud.flash('🤖 Stigli smo do cilja! Autopilot leti ravno — preuzmi kad želiš', now, 4);
+    sound.reward();
+  }
+}
+
 function toggleGear(): void {
   const result = model.toggleGear();
   const messages = {
@@ -382,6 +460,20 @@ function toggleGear(): void {
   hud.flash(messages[result], timer.getElapsed(), 2);
   if (result === 'up' || result === 'down') sound.gear();
 }
+// The 🔫 button fires while held.
+const setTouchFiring = (on: boolean) => {
+  touchFiring = on;
+  fireButton.classList.toggle('firing', on);
+};
+fireButton.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  setTouchFiring(true);
+});
+for (const type of ['pointerup', 'pointercancel', 'pointerleave'] as const) fireButton.addEventListener(type, () => setTouchFiring(false));
+autopilotButton.addEventListener('click', () => {
+  (autopilotButton as HTMLButtonElement).blur();
+  if (started && !paused && !menu.visible) toggleAutopilot();
+});
 const dropButton = document.getElementById('drop-btn')!;
 dropButton.addEventListener('click', () => {
   dropFocus();
@@ -518,6 +610,83 @@ function updateFuel(dt: number, now: number): void {
   }
 }
 
+/** The trigger: X, or Space / the gamepad's A in the air (on the ground they brake), or the 🔫 button. */
+function triggerHeld(): boolean {
+  const airborne = !model.onGround;
+  return input.isHeld('KeyX') || touchFiring || (airborne && (input.isHeld('Space') || input.padHeld(PAD_A)));
+}
+
+/** Fires the gun, bursts balloons (counting them for the mission or practice), refills it at airports. */
+function updateGun(dt: number, now: number): void {
+  practice?.update(dt);
+  if (practice && now >= practiceBackAt) {
+    practice.reset();
+    practiceBackAt = Infinity;
+    hud.flash('🎈 Nove mete su gore!', now, 2.5);
+  }
+  if (!gun) return;
+  const { fired, burst } = gun.update(dt, model, triggerHeld() && !model.onGround, terrain, mission instanceof MissionRun ? (mission.balloons ?? null) : practice);
+  if (fired) sound.gunshot();
+  if (burst) {
+    sound.pop();
+    progress.updateStats((s) => (s.balloons += burst));
+    if (mission instanceof MissionRun) applyMission(mission.onBurst(burst), now);
+    else if (practice) {
+      const left = practice.left;
+      hud.flash(left ? `🎈 Pogodak! Još ${left} balona` : '🎈 Sve mete pogođene! Bravo! Nove stižu za tren…', now, 2.5);
+      if (!left) practiceBackAt = now + 5;
+    }
+    checkBadges();
+  }
+  if (fired && gun.ammo === 0 && !outOfAmmoSaid) {
+    outOfAmmoSaid = true;
+    hud.flash('🔫 Nema više metaka — stani na nekom aerodromu da napuniš', now, 3.5, true);
+  }
+  // Standing at an airport, the gun is filled again.
+  const stopped = model.onGround && model.speed < 1 && !model.crashed;
+  if (stopped && gun.ammo < AMMO && terrain.nearestAirport(model.position.x, model.position.z).distance < REFUEL_RANGE) {
+    gun.reload();
+    outOfAmmoSaid = false;
+    hud.flash(`🔫 Mitraljez napunjen (${AMMO} metaka)`, now, 2.5);
+  }
+}
+
+/** Faster than sound: a double boom and a cloud of vapour round the plane. */
+function checkSoundBarrier(now: number): void {
+  if (model.crashed) return;
+  if (!supersonic && model.speed >= SPEED_OF_SOUND) {
+    supersonic = true;
+    sound.sonicBoom();
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      const ring = new Vector3(Math.cos(a) * 3, Math.sin(a) * 3, 0).applyQuaternion(model.quaternion).add(model.position);
+      effects.emit('vapor', ring, model.velocity.clone().multiplyScalar(0.92), 2);
+    }
+    hud.flash(`💥 Probio si zvučni zid! ${Math.round(model.speed * 3.6)} km/h — brži si od zvuka!`, now, 3.5);
+    progress.updateStats((s) => s.supersonic++);
+    checkBadges();
+  } else if (supersonic && model.speed < SPEED_OF_SOUND * 0.95) {
+    supersonic = false;
+  }
+}
+
+/** The gunsight sits where the rounds would be SIGHT_RANGE metres ahead. */
+function updateGunsight(): void {
+  const show = !!gun && started && !menu.visible && !model.crashed && !model.onGround;
+  if (show) {
+    gun!.aimPoint(model, SIGHT_RANGE, sightPoint).project(camera);
+    const visible = sightPoint.z < 1 && Math.abs(sightPoint.x) < 1 && Math.abs(sightPoint.y) < 1;
+    gunsight.classList.toggle('hidden', !visible);
+    if (visible) {
+      gunsight.style.left = `${((sightPoint.x + 1) / 2) * window.innerWidth}px`;
+      gunsight.style.top = `${((1 - sightPoint.y) / 2) * window.innerHeight}px`;
+    }
+  } else {
+    gunsight.classList.add('hidden');
+  }
+  hud.setAmmo(gun ? gun.ammo : null);
+}
+
 /** Counts a landing towards the records and badges. */
 function recordLandingStats(stars: number, airport: string | undefined): void {
   const onWater = terrain.heightAt(model.position.x, model.position.z) < SEA_LEVEL;
@@ -633,6 +802,7 @@ function frame(time: number): void {
   if (playing) {
     if (input.wasTapped('KeyC')) cycleCamera();
     if (input.wasTapped('KeyG') && !paused) toggleGear();
+    if (input.wasTapped('KeyT') && !paused) toggleAutopilot();
     if (input.wasTapped('KeyV') && !paused) cycleFlaps();
     if (input.wasTapped('KeyB') && !paused) dropLoad(now);
     if (input.wasTapped('KeyP')) setPaused(!paused);
@@ -647,11 +817,16 @@ function frame(time: number): void {
   if (playing && !paused) {
     checkSmoothness(realDt, now);
     const controls = touch.apply(input.controls(dt));
+    if (autopilot.engaged && autopilot.pilotTookOver(controls)) setAutopilot(false, '🤖 Autopilot isključen — ti upravljaš');
+    const target = autopilot.engaged && mission ? currentTarget() : null;
+    const goTo = target?.x !== undefined && target.z !== undefined ? { x: target.x, z: target.z } : null;
     accumulator += dt;
     while (accumulator >= PHYSICS_STEP) {
-      handleEvents(model.step(PHYSICS_STEP, controls, terrain), now);
+      const flying = autopilot.engaged ? autopilot.fly(model, controls, PHYSICS_STEP, terrain, goTo) : controls;
+      handleEvents(model.step(PHYSICS_STEP, flying, terrain), now);
       accumulator -= PHYSICS_STEP;
     }
+    checkAutopilot(now);
     // Flying (or taxiing) into another plane.
     const bumped = model.crashed ? null : collision(model, [...traffic.obstacles, ...world.parked]);
     if (bumped) {
@@ -667,6 +842,8 @@ function frame(time: number): void {
     } else if (mission && !model.crashed) applyMission(mission.update(dt, model), now);
     checkDiscovery(now);
     updateFuel(dt, now);
+    updateGun(dt, now);
+    checkSoundBarrier(now);
     const trick = flightLog.update(dt, model, progress.stats);
     if (trick) {
       progress.updateStats((s) => (trick === 'loop' ? s.loops++ : s.rolls++));
@@ -700,6 +877,7 @@ function frame(time: number): void {
   minimap.update(model, traffic.positions, mission ? target : null);
   instruments.update(model, target);
   touch.update(model.throttle);
+  updateGunsight();
   cockpit.update(model, started && rig.mode === 'cockpit', paused ? 0 : dt);
   graphics.render();
 }

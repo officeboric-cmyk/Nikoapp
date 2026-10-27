@@ -22,6 +22,8 @@ export interface Stats {
   distance: number; // km flown
   loops: number;
   rolls: number;
+  balloons: number; // target balloons burst with the gun
+  supersonic: number; // times through the sound barrier
 }
 
 interface Saved {
@@ -173,6 +175,8 @@ function emptyStats(): Stats {
     distance: 0,
     loops: 0,
     rolls: 0,
+    balloons: 0,
+    supersonic: 0,
   };
 }
 

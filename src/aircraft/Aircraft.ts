@@ -8,6 +8,7 @@ const AILERON = 0.35;
 const ELEVATOR = 0.35;
 const RUDDER = 0.4;
 const FLAPS = 0.6;
+const AFTERBURNER = 0.88; // throttle above which a fighter's afterburner lights
 const SURFACE_SPEED = 12; // how quickly the surfaces follow the stick (higher = snappier)
 
 // The wheels' springs: a stiff, well-damped bounce that settles in about half a second.
@@ -45,9 +46,18 @@ export class Aircraft {
     const gear = this.model.gear;
     gear.scale.y = Math.max(flight.gear, 0.05);
     gear.visible = flight.gear > 0.05;
-    if (flight.crashed) return;
+    if (flight.crashed) {
+      if (this.model.afterburner) this.model.afterburner.visible = false;
+      return;
+    }
     this.updateSurfaces(flight, dt);
     spinPropellers(this.model.propellers, 4 + flight.power * 40, dt); // without fuel it only windmills
+    // A fighter's afterburner lights at full power and flickers.
+    const flame = this.model.afterburner;
+    if (flame) {
+      flame.visible = flight.power > AFTERBURNER;
+      if (flame.visible) flame.scale.set(1, 1, 0.85 + Math.random() * 0.3);
+    }
   }
 
   private updateSurfaces(flight: FlightModel, dt: number): void {

@@ -20,7 +20,7 @@ import type { Terrain } from './Terrain';
  * particles in one pool, drawn in a single call.
  */
 
-export type EffectKind = 'smoke' | 'dust' | 'spray' | 'contrail' | 'crash' | 'flame' | 'fireSmoke' | 'water';
+export type EffectKind = 'smoke' | 'dust' | 'spray' | 'contrail' | 'crash' | 'flame' | 'fireSmoke' | 'water' | 'pop' | 'vapor' | 'spark';
 
 interface Look {
   color: number;
@@ -41,6 +41,9 @@ const LOOKS: Record<EffectKind, Look> = {
   flame: { color: 0xff7a1a, size: [6, 1.5], life: 1.1, alpha: 0.9, drag: 1.5, lift: 7, glow: true },
   fireSmoke: { color: 0x4a4744, size: [10, 55], life: 14, alpha: 0.6, drag: 0.3, lift: 2.5 },
   water: { color: 0xe3f4ff, size: [2, 10], life: 3, alpha: 0.6, drag: 0.25, lift: -9.81 },
+  pop: { color: 0xfff1e0, size: [3, 12], life: 0.7, alpha: 0.85, drag: 3, lift: 0 }, // a balloon bursting
+  vapor: { color: 0xffffff, size: [5, 16], life: 0.6, alpha: 0.55, drag: 2.5, lift: 0 }, // the cloud round a plane at the speed of sound
+  spark: { color: 0xffc04d, size: [1.2, 0.3], life: 0.25, alpha: 1, drag: 1, lift: 0, glow: true }, // a bullet striking
 };
 
 const COLORS = Object.fromEntries(Object.entries(LOOKS).map(([kind, look]) => [kind, new Color(look.color)])) as Record<EffectKind, Color>;

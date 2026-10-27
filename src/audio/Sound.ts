@@ -129,7 +129,9 @@ export class Sound {
     const engineVolume = jet ? 0.03 + throttle * 0.06 : 0.05 + throttle * 0.12;
     this.engineGain.gain.setTargetAtTime(engineOn ? engineVolume : 0, t, SMOOTH);
     this.propLfo.frequency.setTargetAtTime(8 + throttle * 20, t, SMOOTH);
-    this.roarGain.gain.setTargetAtTime(engineOn && jet ? 0.04 + throttle * 0.18 : 0, t, SMOOTH);
+    // Full power on a fighter lights the afterburner: a deeper roar.
+    const afterburner = Math.max(0, throttle - 0.88) * 2;
+    this.roarGain.gain.setTargetAtTime(engineOn && jet ? 0.04 + throttle * 0.18 + afterburner : 0, t, SMOOTH);
 
     this.windFilter.frequency.setTargetAtTime(300 + speed * 1500, t, SMOOTH);
     this.windGain.gain.setTargetAtTime(running ? speed * speed * 0.25 : 0, t, SMOOTH);
@@ -203,6 +205,40 @@ export class Sound {
   scrape(): void {
     if (!this.ctx) return;
     this.noiseBurst('lowpass', 900, 0.4, 2.5);
+  }
+
+  /** One shot of the gun: a sharp crack with a little thump. */
+  gunshot(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.noiseBurst('bandpass', 1600, 0.16, 0.07);
+    const t = ctx.currentTime;
+    const thumpGain = gain(ctx, 0, this.master);
+    thumpGain.gain.setValueAtTime(0.12, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    osc(ctx, 'square', 70, thumpGain, t).stop(t + 0.08);
+  }
+
+  /** A balloon bursting. */
+  pop(): void {
+    if (!this.ctx) return;
+    this.noiseBurst('highpass', 1200, 0.45, 0.18);
+  }
+
+  /** The double boom of a plane going faster than sound. */
+  sonicBoom(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    for (const delay of [0, 0.12]) {
+      const t = ctx.currentTime + delay;
+      const boomGain = gain(ctx, 0, this.master);
+      boomGain.gain.setValueAtTime(0.55, t);
+      boomGain.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+      const boom = osc(ctx, 'sine', 90, boomGain, t);
+      boom.frequency.exponentialRampToValueAtTime(30, t + 0.6);
+      boom.stop(t + 0.7);
+    }
+    this.noiseBurst('lowpass', 400, 0.5, 0.9);
   }
 
   /** A soft, cartoonish "bump" rather than anything scary. */
