@@ -90,12 +90,14 @@ src/
   game/hillWarning.ts     – upozorenje „Pazi, brdo!"
   game/Progress.ts        – spremljeni napredak (zvjezdice, otkriveni otoci)
   world/islands.ts        – popis otoka i aerodroma (lako dodati nove)
-  world/Terrain.ts        – visinske mape otoka, more, "koliko je visoko tlo ovdje?"
-  world/Airport.ts        – pista, oznake, toranj, hangar, vjetrokaz, izravnavanje tla
-  world/World.ts          – svjetlo, šume, sela, svjetionik, oblaci, imena otoka, noćna svjetla
+  world/Terrain.ts        – visinske mape otoka, "koliko je visoko tlo ovdje?"
+  world/Airport.ts        – pista, oznake, toranj, hangar, terminal, vjetrokaz, izravnavanje tla
+  world/World.ts          – svjetlo, šume, palme, sela, svjetionik, oblaci, imena otoka, brojevi pista,
+                            parkirani avioni, noćna svjetla
   world/Environment.ts    – doba dana i vrijeme: nebo, sunce/mjesec, zvijezde, kiša, vjetar
   world/Sky.ts            – nebo (prijelaz boja, sjaj i disk sunca ili mjeseca)
   world/Sea.ts            – more: valići, odraz neba, odsjaj sunca, plićaci i pjena uz obalu
+  world/Effects.ts        – dim guma pri slijetanju, prašina na travi, prskanje vode, tragovi mlažnjaka
   world/Traffic.ts        – drugi avioni koji lete između aerodroma
   world/lights.ts         – svjetleće točke (pista, avioni, svjetionik)
   camera/CameraRig.ts     – 3 kamere (iza, kokpit/FPV, sa strane), nikad u brdu

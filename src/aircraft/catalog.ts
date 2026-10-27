@@ -63,6 +63,7 @@ export interface AircraftType {
   // cockpit = pilot's eye, placed so the nose fills only the bottom of the FPV view
   camera: { distance: number; height: number; cockpit: [number, number, number] };
   liveries?: boolean; // wears an airline's colours (see airlines.ts)
+  exhausts?: [number, number, number][]; // jet engine outlets, where contrails start
   build(airline?: Airline): AircraftModel;
 }
 
@@ -97,6 +98,7 @@ export const AIRCRAFT: AircraftType[] = [
     description: 'Jako brz! Treba mu duga pista.',
     engine: 'jet',
     camera: { distance: 15, height: 4.5, cockpit: [0, 1.1, -3.6] },
+    exhausts: [[0, 0, 5.3]],
     spec: {
       maxThrust: 14,
       maxSpeed: 120,
@@ -146,6 +148,10 @@ export const AIRCRAFT: AircraftType[] = [
     engine: 'jet',
     liveries: true,
     camera: { distance: 40, height: 11, cockpit: [0, 1.8, -12.6] },
+    exhausts: [
+      [-5.5, -2, 1.4],
+      [5.5, -2, 1.4],
+    ],
     spec: {
       maxThrust: 5,
       maxSpeed: 85,

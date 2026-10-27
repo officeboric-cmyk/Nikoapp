@@ -173,7 +173,15 @@ export class Airport {
     this.windsock.add(sock);
     group.add(this.windsock);
 
-    for (const mesh of [tower, cab, hangar, pole]) {
+    // The terminal: a long low building with a band of windows, behind the apron.
+    const terminal = new Mesh(new BoxGeometry(16, 8, 70), white);
+    terminal.position.set(side + 97, 4, half - 220);
+    const windows = new Mesh(new BoxGeometry(16.3, 2.2, 66), glass);
+    windows.position.set(side + 97, 4.6, half - 220);
+    const roof = new Mesh(new BoxGeometry(18, 0.8, 72), new MeshStandardMaterial({ color: 0x457b9d, flatShading: true }));
+    roof.position.set(side + 97, 8.4, half - 220);
+
+    for (const mesh of [tower, cab, hangar, pole, terminal, windows, roof]) {
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
     }

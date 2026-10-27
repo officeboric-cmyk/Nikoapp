@@ -22,9 +22,12 @@ import {
   Scene,
   Sprite,
   SpriteMaterial,
+  PlaneGeometry,
   Vector3,
 } from 'three';
-import { RUNWAY_WIDTH } from './Airport';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { AIRCRAFT } from '../aircraft/catalog';
+import { RUNWAY_WIDTH, type Airport } from './Airport';
 import { MAP_HALF_SIZE, type IslandDef } from './islands';
 import { lightMaterial, lightPoints } from './lights';
 import { mulberry32, noise2 } from './noise';
@@ -36,6 +39,7 @@ import { Terrain } from './Terrain';
 export const SKY_COLOR = 0x87ceeb;
 const SHADOW_RANGE = 80; // m around the plane covered by the sun's shadow map
 const TREE_COUNT = 6000;
+const PALM_COUNT = 700;
 const LABEL_HIDE_NEAR = 700; // m, labels fade out when you get this close
 const LABEL_SHOW_FAR = 1600; // m, fully visible from here on
 
@@ -77,9 +81,14 @@ export class World {
     scene.add(this.sea.mesh);
     const rand = mulberry32(42);
     this.addTrees(rand);
+    this.addPalms(rand);
     this.addHouses(rand);
     this.addLighthouses();
     this.addRunwayLights();
+    for (const airport of this.terrain.airports) {
+      this.addRunwayNumbers(airport);
+      this.addParkedPlanes(airport);
+    }
     this.addClouds(rand);
     this.addLabels();
     for (const object of this.nightOnly) object.visible = false;
@@ -156,6 +165,90 @@ export class World {
     }
     trunks.count = crowns.count = placed;
     this.scene.add(trunks, crowns);
+  }
+
+  /** Palm trees along the sandy beaches, leaning a little this way and that. */
+  private addPalms(rand: () => number): void {
+    const trunkHeight = 7;
+    const fronds = mergeGeometries(
+      Array.from({ length: 6 }, (_, k) =>
+        new BoxGeometry(4.5, 0.12, 1.1)
+          .translate(2.25, 0, 0)
+          .rotateZ(-0.4) // drooping
+          .rotateY((k / 6) * Math.PI * 2)
+          .translate(0, trunkHeight, 0),
+      ),
+    );
+    const trunks = new InstancedMesh(
+      new CylinderGeometry(0.22, 0.35, trunkHeight, 5).translate(0, trunkHeight / 2, 0),
+      new MeshStandardMaterial({ color: 0x9c6b3e, flatShading: true }),
+      PALM_COUNT,
+    );
+    const crowns = new InstancedMesh(fronds, new MeshStandardMaterial({ color: 0xffffff, flatShading: true }), PALM_COUNT);
+    trunks.castShadow = crowns.castShadow = true;
+    const islands = this.terrain.islandDefs();
+    const m = new Matrix4();
+    const color = new Color();
+    const tilt = new Quaternion();
+    let placed = 0;
+    for (let attempt = 0; attempt < PALM_COUNT * 60 && placed < PALM_COUNT; attempt++) {
+      const [x, z] = this.pointOn(islands[Math.floor(rand() * islands.length)], rand);
+      const h = this.terrain.heightAt(x, z);
+      if (h < 0.6 || h > 4 || this.slopeAt(x, z) > 0.3 || this.nearAirport(x, z)) continue;
+      const s = 0.8 + rand() * 0.5;
+      tilt.setFromAxisAngle(new Vector3(rand() - 0.5, 0, rand() - 0.5).normalize(), rand() * 0.25).multiply(yRotation(rand() * Math.PI * 2));
+      m.compose(new Vector3(x, h - 0.2, z), tilt, new Vector3(s, s, s));
+      trunks.setMatrixAt(placed, m);
+      crowns.setMatrixAt(placed, m);
+      crowns.setColorAt(placed, color.setHSL(0.3 + rand() * 0.05, 0.55, 0.32 + rand() * 0.1));
+      placed++;
+    }
+    trunks.count = crowns.count = placed;
+    this.scene.add(trunks, crowns);
+  }
+
+  /** The runway's number (its compass heading in tens of degrees) painted at each end. */
+  private addRunwayNumbers(airport: Airport): void {
+    const compass = MathUtils.euclideanModulo(MathUtils.radToDeg(-airport.heading), 360);
+    const number = Math.round(compass / 10) || 36;
+    const ends = [
+      { text: number, along: -(airport.length / 2 - 45), turn: 0 },
+      { text: ((number + 17) % 36) + 1, along: airport.length / 2 - 45, turn: Math.PI },
+    ];
+    for (const end of ends) {
+      const paint = new Mesh(
+        new PlaneGeometry(10, 15).rotateX(-Math.PI / 2),
+        new MeshStandardMaterial({
+          map: numberTexture(String(end.text).padStart(2, '0')),
+          transparent: true,
+          roughness: 0.8,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+          polygonOffsetUnits: -6,
+        }),
+      );
+      paint.position.copy(airport.pointAt(end.along, 0)).setY(airport.center.y + 0.14);
+      paint.rotation.y = airport.heading + end.turn; // the top of the digits points along the runway
+      paint.receiveShadow = true;
+      this.scene.add(paint);
+    }
+  }
+
+  /** A couple of small planes waiting on the apron, noses towards the runway. */
+  private addParkedPlanes(airport: Airport): void {
+    const half = airport.length / 2;
+    const spots = [
+      { id: 'trainer', along: 165 - half, across: RUNWAY_WIDTH / 2 + 28 },
+      { id: 'jet', along: 285 - half, across: RUNWAY_WIDTH / 2 + 30 },
+    ];
+    for (const spot of spots) {
+      const type = AIRCRAFT.find((t) => t.id === spot.id)!;
+      const plane = type.build().object;
+      plane.position.copy(airport.pointAt(spot.along, spot.across));
+      plane.position.y += type.spec.gearHeight + 0.1;
+      plane.rotation.y = airport.heading + Math.PI / 2;
+      this.scene.add(plane);
+    }
   }
 
   private addHouses(rand: () => number): void {
@@ -317,6 +410,24 @@ function labelTexture(text: string): CanvasTexture {
   ctx.fillStyle = '#ffffff';
   ctx.fillText(text, 256, 64);
   return new CanvasTexture(canvas);
+}
+
+function numberTexture(text: string): CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 192;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = 'bold 150px "Trebuchet MS", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.save();
+  ctx.scale(0.55, 1); // tall and narrow, like painted runway digits
+  ctx.fillText(text, 64 / 0.55, 100);
+  ctx.restore();
+  const texture = new CanvasTexture(canvas);
+  texture.anisotropy = 4;
+  return texture;
 }
 
 const yAxis = new Vector3(0, 1, 0);

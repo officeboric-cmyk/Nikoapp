@@ -1,4 +1,4 @@
-import { ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, Scene, Timer, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, Color, PCFShadowMap, PerspectiveCamera, Scene, Timer, WebGLRenderer } from 'three';
 import { Aircraft } from './aircraft/Aircraft';
 import { airlineById } from './aircraft/airlines';
 import { AIRCRAFT } from './aircraft/catalog';
@@ -18,6 +18,7 @@ import { Minimap } from './ui/Minimap';
 import { TouchControls } from './ui/TouchControls';
 import { ISLANDS, MAP_HALF_SIZE } from './world/islands';
 import { Traffic } from './world/Traffic';
+import { Effects } from './world/Effects';
 import { Environment, type TimeOfDay, type Weather } from './world/Environment';
 import { World } from './world/World';
 
@@ -43,6 +44,10 @@ const world = new World(scene, touch.enabled ? 1024 : 2048);
 const terrain = world.terrain;
 const traffic = new Traffic(scene, terrain);
 const environment = new Environment(scene, world);
+const effects = new Effects(scene);
+effects.setViewport(window.innerHeight * renderer.getPixelRatio());
+// The light on smoke and spray at each time of day.
+const SMOKE_LIGHT: Record<TimeOfDay, number> = { day: 0xffffff, sunset: 0xffcfa8, night: 0x46557a };
 const input = new Input();
 const hud = new HUD();
 const sound = new Sound();
@@ -102,6 +107,7 @@ function begin(picked: Choice): void {
 
 function setEnvironment(time: TimeOfDay, weather: Weather): void {
   environment.set(time, weather);
+  effects.setLight(new Color(SMOKE_LIGHT[time]));
   sound.setRain(weather === 'rain');
   model.wind.copy(environment.wind);
   model.turbulence = environment.turbulence;
@@ -196,6 +202,7 @@ function setup(picked: Choice): void {
     rig.cockpit.fromArray(picked.aircraft.camera.cockpit);
     gearButton.classList.toggle('hidden', !picked.aircraft.spec.retractableGear);
     sound.setEngine(picked.aircraft.engine);
+    effects.setExhausts(picked.aircraft.exhausts ?? []);
   }
   respawn();
 }
@@ -289,6 +296,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  effects.setViewport(window.innerHeight * renderer.getPixelRatio());
 });
 
 function handleEvents(events: FlightEvent[], now: number): void {
@@ -299,6 +307,7 @@ function handleEvents(events: FlightEvent[], now: number): void {
       hasFlown = true;
       sound.takeoff();
     } else if (event === 'touchdown') {
+      effects.touchdown(model);
       const landing = scoreLanding(model, terrain);
       const record = landing.airport && progress.recordLanding(landing.airport.name, landing.stars);
       hud.flash(record ? `${landing.text} Novi rekord!` : landing.text, now, 3.5);
@@ -311,10 +320,12 @@ function handleEvents(events: FlightEvent[], now: number): void {
     } else if (event === 'crash') {
       hud.flash(mission ? 'Bum! Misija kreće ispočetka…' : 'Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
+      effects.crash(model);
       sound.crash();
     } else if (event === 'splash') {
       hud.flash(`Pljus! 🌊 Ovaj avion ne zna plivati. ${mission ? 'Misija kreće ispočetka…' : 'Idemo opet…'}`, now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
+      effects.splash(model);
       sound.splash();
     }
   }
@@ -402,6 +413,7 @@ function frame(time: number): void {
   const altitude = model.position.y - model.spec.gearHeight - below;
   world.update(model.position, paused ? 0 : dt);
   environment.update(paused ? 0 : dt, camera.position);
+  effects.update(paused ? 0 : dt, model, terrain);
   updateHint(now, altitude);
   hud.update(model, now, altitude);
   const target = started ? currentTarget() : null;
