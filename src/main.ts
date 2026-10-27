@@ -22,6 +22,7 @@ import { ISLANDS, MAP_HALF_SIZE } from './world/islands';
 import { Traffic } from './world/Traffic';
 import { Effects } from './world/Effects';
 import { Environment, type TimeOfDay, type Weather } from './world/Environment';
+import { LandingAids } from './world/LandingAids';
 import { World } from './world/World';
 
 const PHYSICS_STEP = 1 / 120; // s, fixed so the flight feels the same at any frame rate
@@ -39,6 +40,7 @@ const terrain = world.terrain;
 const traffic = new Traffic(scene, terrain);
 const environment = new Environment(scene, world);
 const effects = new Effects(scene);
+const landingAids = new LandingAids(scene, terrain.airports);
 // The light on smoke and spray at each time of day.
 const SMOKE_LIGHT: Record<TimeOfDay, number> = { day: 0xffffff, sunset: 0xffcfa8, night: 0x46557a };
 const input = new Input();
@@ -481,6 +483,8 @@ function frame(time: number): void {
   world.update(model.position, paused ? 0 : dt);
   environment.update(paused ? 0 : dt, camera.position);
   effects.update(paused ? 0 : dt, model, terrain);
+  // Guide rings for beginners; the PAPI lights help in every mode.
+  landingAids.update(model, started && model.realism !== 'realistic');
   updateHint(now, altitude);
   hud.update(model, now, altitude);
   const target = started ? currentTarget() : null;

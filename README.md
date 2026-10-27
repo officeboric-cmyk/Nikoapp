@@ -9,6 +9,8 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - **12 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima,
   gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧)
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
+- pomoć za slijetanje: **PAPI svjetla** uz svaku pistu (2 bijela + 2 crvena = dobar prilaz, sva bijela =
+  previsoko, sva crvena = prenisko) i plavi **krugovi** koji vode do piste (u arkadnom i normalnom načinu)
 - **dan, zalazak i noć** (sunce, mjesec, svjetla piste, svjetionik, zvijezde) i **vrijeme**: vedro, vjetar, kiša
 - more s valićima, odrazom neba, plićacima i pjenom; palme na plažama
 - dim guma pri slijetanju, prašina na travi, prskanje vode, bijeli tragovi iza mlažnjaka
@@ -113,6 +115,7 @@ src/
   world/Sky.ts            – nebo (prijelaz boja, sjaj i disk sunca ili mjeseca)
   world/Sea.ts            – more: valići, odraz neba, odsjaj sunca, plićaci i pjena uz obalu
   world/Effects.ts        – dim guma pri slijetanju, prašina na travi, prskanje vode, tragovi mlažnjaka
+  world/LandingAids.ts    – PAPI svjetla uz piste i krugovi za prilaz
   world/Traffic.ts        – drugi avioni koji lete između aerodroma
   world/lights.ts         – svjetleće točke (pista, avioni, svjetionik)
   camera/CameraRig.ts     – 3 kamere (iza, kokpit/FPV, sa strane), nikad u brdu
