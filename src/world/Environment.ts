@@ -53,7 +53,7 @@ interface Look {
 
 const LOOKS: Record<TimeOfDay, Look> = {
   day: {
-    skyTop: 0x2f80d8,
+    skyTop: 0x1a6bd0,
     sky: 0x9dd8f0,
     sunGlow: 0xfff4d6,
     sunGlowStrength: 0.5,

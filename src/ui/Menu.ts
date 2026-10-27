@@ -26,7 +26,16 @@ export interface MenuHandlers {
   onEnvironment(time: TimeOfDay, weather: Weather): void;
   onControls(realControls: boolean): void;
   onRealism(realism: Realism): void;
+  onQuality(quality: Quality): void;
 }
+
+/** Fast: sharp enough and smooth on any phone. Pretty: glow around lights and the sun, crisper shadows. */
+export type Quality = 'fast' | 'pretty';
+
+const QUALITIES: { id: Quality; label: string }[] = [
+  { id: 'fast', label: '⚡ Brzo' },
+  { id: 'pretty', label: '✨ Lijepo' },
+];
 
 const REALISM: { id: Realism; label: string }[] = [
   { id: 'arcade', label: '🧸 Arkadno' },
@@ -56,6 +65,7 @@ export class Menu {
   realControls: boolean;
   /** How true to life the flying is (see FlightModel). */
   realism: Realism;
+  quality: Quality;
 
   constructor(
     aircraftTypes: AircraftType[],
@@ -70,6 +80,9 @@ export class Menu {
     this.weather = WEATHERS.find((w) => w.id === saved?.weather)?.id ?? 'clear';
     this.realControls = saved?.controls !== 'simple';
     this.realism = REALISM.find((r) => r.id === saved?.realism)?.id ?? 'normal';
+    // Phones and tablets start on the fast setting; computers can afford the pretty one.
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    this.quality = QUALITIES.find((q) => q.id === saved?.quality)?.id ?? (coarse ? 'fast' : 'pretty');
 
     // Time of day and weather apply straight away, so the scene behind the menu shows them.
     const pick = () => {
@@ -95,6 +108,14 @@ export class Menu {
         this.save();
         this.render();
         this.handlers.onRealism(id);
+      });
+    }
+    for (const { id, label } of QUALITIES) {
+      pill(document.getElementById('env-quality')!, id, label, () => {
+        this.quality = id;
+        this.save();
+        this.render();
+        this.handlers.onQuality(id);
       });
     }
     for (const { id, label } of CONTROL_STYLES) {
@@ -205,6 +226,7 @@ export class Menu {
         weather: this.weather,
         controls: this.realControls ? 'real' : 'simple',
         realism: this.realism,
+        quality: this.quality,
       };
       localStorage.setItem(CHOICE_KEY, JSON.stringify(saved));
     } catch {
@@ -221,6 +243,9 @@ export class Menu {
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-realism .pill')) {
       button.classList.toggle('selected', button.dataset.id === this.realism);
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-quality .pill')) {
+      button.classList.toggle('selected', button.dataset.id === this.quality);
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-controls .pill')) {
       button.classList.toggle('selected', (button.dataset.id === 'real') === this.realControls);
@@ -263,6 +288,7 @@ interface SavedChoice {
   weather?: string;
   controls?: string;
   realism?: string;
+  quality?: string;
 }
 
 function loadChoice(): SavedChoice | null {

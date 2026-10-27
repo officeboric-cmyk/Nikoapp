@@ -55,14 +55,14 @@ export class SkyDome {
         varying vec3 vDirection;
         void main() {
           gl_FragColor = vec4(skyColor(normalize(vDirection)), 1.0);
+          #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }
       `,
       side: BackSide,
       depthWrite: false,
       depthTest: false,
-      fog: false,
-      toneMapped: false,
+      fog: false, // the sky is drawn in the fog colour at the horizon already
     });
     this.mesh = new Mesh(new SphereGeometry(DOME_RADIUS, 32, 16), material);
     this.mesh.frustumCulled = false;

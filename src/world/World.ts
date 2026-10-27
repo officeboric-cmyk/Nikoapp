@@ -57,10 +57,7 @@ export class World {
   private readonly beams: Object3D[] = [];
   private readonly labels: Sprite[] = [];
 
-  constructor(
-    private readonly scene: Scene,
-    shadowMapSize = 2048,
-  ) {
+  constructor(private readonly scene: Scene) {
     scene.background = new Color(SKY_COLOR);
     scene.fog = new Fog(SKY_COLOR, 2500, 12000);
 
@@ -68,7 +65,6 @@ export class World {
     scene.add(this.sky);
     this.sun = new DirectionalLight(0xffffff, 2.2);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     const cam = this.sun.shadow.camera;
     cam.left = cam.bottom = -SHADOW_RANGE;
     cam.right = cam.top = SHADOW_RANGE;
@@ -185,7 +181,6 @@ export class World {
       PALM_COUNT,
     );
     const crowns = new InstancedMesh(fronds, new MeshStandardMaterial({ color: 0xffffff, flatShading: true }), PALM_COUNT);
-    trunks.castShadow = crowns.castShadow = true;
     const islands = this.terrain.islandDefs();
     const m = new Matrix4();
     const color = new Color();

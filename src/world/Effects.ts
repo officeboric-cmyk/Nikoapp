@@ -97,6 +97,7 @@ export class Effects {
           float r = length(gl_PointCoord - 0.5) * 2.0;
           if (r > 1.0) discard;
           gl_FragColor = vec4(vColor * light, vAlpha * (1.0 - r * r));
+          #include <tonemapping_fragment>
           #include <colorspace_fragment>
           #include <fog_fragment>
         }

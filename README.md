@@ -3,12 +3,15 @@
 Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScript + Vite).
 
 - **12 otoka**: Sunčani, Zeleni, Planinski, Pješčani, Borov, Dugi, Vulkan, Ledeni, Kameni, Gusarski, Otok dupina i Otok svjetionika
-- **6 aerodroma** s pistom, tornjem, hangarom i vjetrokazom
+- **6 aerodroma** s pistom (i brojevima na njoj), tornjem, hangarom, terminalom, parkiranim avionima i vjetrokazom
 - **4 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!) i Putnički avion
 - **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
 - **11 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
-- **dan, zalazak i noć** (svjetla piste, svjetionik, zvijezde) i **vrijeme**: vedro, vjetar, kiša
+- **dan, zalazak i noć** (sunce, mjesec, svjetla piste, svjetionik, zvijezde) i **vrijeme**: vedro, vjetar, kiša
+- more s valićima, odrazom neba, plićacima i pjenom; palme na plažama
+- dim guma pri slijetanju, prašina na travi, prskanje vode, bijeli tragovi iza mlažnjaka
+- pokretna krilca, kormila i zakrilca, kotači na oprugama, zamućeni propeler
 - drugi avioni lete između aerodroma
 - instrumenti (umjetni horizont, kompas), strelica do cilja, mini-karta, upozorenje „Pazi, brdo!"
 - 3 kamere: iza aviona, iz kokpita (FPV) i sa strane; zvuk motora, vjetra i kiše
@@ -80,6 +83,7 @@ izvući kotače, avion klizne po trbuhu i vrati se na početak.
 src/
   main.ts                 – pokretanje, glavna petlja, poruke igraču
   core/Input.ts           – tipkovnica i gamepad → kontrole (-1..1), glatko pomicanje palice
+  core/Graphics.ts        – iscrtavanje i kvaliteta slike (Brzo / Lijepo: razlučivost, sjene, sjaj)
   physics/FlightModel.ts  – fizika leta (fiksni korak 120 Hz): sile, uzgon, zakrilca, tlo, more, vjetar
   aircraft/catalog.ts     – 4 aviona: fizika, kamera, zvuk, model od osnovnih oblika, svjetla
   aircraft/airlines.ts    – aviokompanije i njihove boje
@@ -101,7 +105,7 @@ src/
   world/Traffic.ts        – drugi avioni koji lete između aerodroma
   world/lights.ts         – svjetleće točke (pista, avioni, svjetionik)
   camera/CameraRig.ts     – 3 kamere (iza, kokpit/FPV, sa strane), nikad u brdu
-  ui/HUD.ts               – brzina, visina iznad tla, gas, poruke, pomoć
+  ui/HUD.ts               – brzina, visina iznad tla, gas, zakrilca, kotači, poruke, pomoć
   ui/Instruments.ts       – umjetni horizont, kompas, strelica do cilja
   ui/Menu.ts              – misije, slobodno letenje, doba dana, vrijeme
   ui/Minimap.ts           – mini-karta otoka, drugih aviona i cilja
@@ -121,6 +125,10 @@ src/
 Zakrilca daju više uzgona pri maloj brzini (ali i više otpora). Blizu tla avion lakše
 lebdi (efekt tla). Vjetar puše i u zraku, pa avion pri slijetanju malo „ide ukoso".
 Pad samo vrati avion na pistu. Sletjeti se može i na travu; samo hidroavion smije na more.
+
+**Slika:** u izborniku je i postavka kvalitete. ⚡ **Brzo** (zadano na mobitelu i tabletu)
+crta izravno na ekran u nešto manjoj razlučivosti. ✨ **Lijepo** (zadano na računalu) crta
+oštrije, s boljim sjenama i blagim sjajem (bloom) oko sunca, odsjaja na moru i svjetala noću.
 
 ## Faze
 

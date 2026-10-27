@@ -1,9 +1,10 @@
-import { ACESFilmicToneMapping, Color, PCFShadowMap, PerspectiveCamera, Scene, Timer, WebGLRenderer } from 'three';
+import { Color, PerspectiveCamera, Scene, Timer } from 'three';
 import { Aircraft } from './aircraft/Aircraft';
 import { airlineById } from './aircraft/airlines';
 import { AIRCRAFT } from './aircraft/catalog';
 import { Sound } from './audio/Sound';
 import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
+import { Graphics } from './core/Graphics';
 import { Input } from './core/Input';
 import { hillAhead } from './game/hillWarning';
 import { scoreLanding, starText } from './game/landing';
@@ -13,7 +14,7 @@ import { Progress } from './game/Progress';
 import { FlightModel, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
 import { HUD } from './ui/HUD';
 import { Instruments, type Target } from './ui/Instruments';
-import { Menu, type Choice } from './ui/Menu';
+import { Menu, type Choice, type Quality } from './ui/Menu';
 import { Minimap } from './ui/Minimap';
 import { TouchControls } from './ui/TouchControls';
 import { ISLANDS, MAP_HALF_SIZE } from './world/islands';
@@ -29,23 +30,14 @@ const SHOW_AIRPORT_BEYOND = 1500; // m, the arrow points to the nearest airport 
 const GEAR_WARNING_HEIGHT = 150; // m, descending below this with the wheels up warns the player
 
 const touch = new TouchControls();
-const renderer = new WebGLRenderer({ antialias: true });
-// Phones and tablets get a slightly lighter picture so the game stays smooth.
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, touch.enabled ? 1.5 : 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = PCFShadowMap;
-renderer.toneMapping = ACESFilmicToneMapping;
-document.getElementById('app')!.appendChild(renderer.domElement);
-
 const scene = new Scene();
 const camera = new PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 15000);
-const world = new World(scene, touch.enabled ? 1024 : 2048);
+const world = new World(scene);
+const graphics = new Graphics(document.getElementById('app')!, scene, camera, world);
 const terrain = world.terrain;
 const traffic = new Traffic(scene, terrain);
 const environment = new Environment(scene, world);
 const effects = new Effects(scene);
-effects.setViewport(window.innerHeight * renderer.getPixelRatio());
 // The light on smoke and spray at each time of day.
 const SMOKE_LIGHT: Record<TimeOfDay, number> = { day: 0xffffff, sunset: 0xffcfa8, night: 0x46557a };
 const input = new Input();
@@ -73,6 +65,7 @@ const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, {
   onEnvironment: setEnvironment,
   onControls: setControls,
   onRealism: (realism) => (model.realism = realism),
+  onQuality: setQuality,
 });
 const missionDone = document.getElementById('mission-done')!;
 const gearButton = document.getElementById('gear-btn')!;
@@ -218,6 +211,11 @@ function respawn(): void {
   accumulator = 0;
 }
 
+function setQuality(quality: Quality): void {
+  graphics.setQuality(quality);
+  effects.setViewport(graphics.pixelHeight);
+}
+
 function setPaused(value: boolean): void {
   paused = value;
   sound.setPaused(paused);
@@ -225,6 +223,7 @@ function setPaused(value: boolean): void {
 
 setup(menu.choice); // show the plane on its runway behind the menu
 setEnvironment(menu.time, menu.weather);
+setQuality(menu.quality);
 setControls(menu.realControls);
 
 document.getElementById('menu-btn')!.addEventListener('click', toggleMenu);
@@ -295,8 +294,8 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  effects.setViewport(window.innerHeight * renderer.getPixelRatio());
+  graphics.resize();
+  effects.setViewport(graphics.pixelHeight);
 });
 
 function handleEvents(events: FlightEvent[], now: number): void {
@@ -420,6 +419,6 @@ function frame(time: number): void {
   minimap.update(model, traffic.positions, mission ? target : null);
   instruments.update(model, target);
   touch.update(model.throttle);
-  renderer.render(scene, camera);
+  graphics.render();
 }
 requestAnimationFrame(frame);
