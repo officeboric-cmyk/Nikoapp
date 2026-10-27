@@ -5,6 +5,7 @@ import { AIRCRAFT } from './aircraft/catalog';
 import { Radio, windWords } from './audio/Radio';
 import { Sound } from './audio/Sound';
 import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
+import { AutoQuality } from './core/AutoQuality';
 import { Graphics } from './core/Graphics';
 import { Input } from './core/Input';
 import { newBadges } from './game/badges';
@@ -56,6 +57,7 @@ radio.muted = sound.isMuted;
 /** Calls from the tower waiting to be made a little later (so they don't cover the start message). */
 const pendingCalls: { at: number; kind: string; text: string }[] = [];
 const flightLog = new FlightLog();
+const autoQuality = new AutoQuality();
 const REFUEL_RANGE = 900; // m from an airport's middle where a stopped plane is filled up
 const REFUEL_BELOW = 0.98; // a tank fuller than this isn't topped up
 const STRANDED_DELAY = 4; // s before a plane out of fuel away from any airport goes back to the start
@@ -321,6 +323,21 @@ async function setSteering(tilt: boolean, explain: boolean): Promise<void> {
 function setQuality(quality: Quality): void {
   graphics.setQuality(quality);
   effects.setViewport(graphics.pixelHeight);
+  autoQuality.restart();
+}
+
+/** Steps the picture down when the device can't keep the game smooth (unless the player chose a setting). */
+function checkSmoothness(realDt: number, now: number): void {
+  if (menu.qualityChosen) return;
+  const step = autoQuality.update(realDt, graphics.level);
+  if (step === 'fast') {
+    setQuality('fast');
+    menu.autoQuality('fast');
+    hud.flash('⚡ Slika je prebačena na „Brzo" da igra teče glatko (možeš promijeniti u izborniku)', now, 4);
+  } else if (step === 'lower') {
+    graphics.lowerResolution();
+    effects.setViewport(graphics.pixelHeight);
+  }
 }
 
 function setPaused(value: boolean): void {
@@ -604,7 +621,8 @@ function updateHint(now: number, altitude: number): void {
 function frame(time: number): void {
   requestAnimationFrame(frame);
   timer.update(time);
-  const dt = Math.min(timer.getDelta(), MAX_FRAME);
+  const realDt = timer.getDelta();
+  const dt = Math.min(realDt, MAX_FRAME);
   const now = timer.getElapsed();
 
   input.poll(); // gamepad buttons become key taps
@@ -626,6 +644,7 @@ function frame(time: number): void {
   }
 
   if (playing && !paused) {
+    checkSmoothness(realDt, now);
     const controls = touch.apply(input.controls(dt));
     accumulator += dt;
     while (accumulator >= PHYSICS_STEP) {

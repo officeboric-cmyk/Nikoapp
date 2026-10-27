@@ -17,12 +17,16 @@ const SETTINGS: Record<Quality, { pixelRatio: number; shadowMap: number; bloom: 
   pretty: { pixelRatio: 2, shadowMap: 2048, bloom: true },
 };
 
+const LOWEST_PIXEL_RATIO = 0.75; // the step below fast: a slightly soft picture that most devices can draw smoothly
+
 const BLOOM = { strength: 0.45, radius: 0.5, threshold: 0.9 };
 
 export class Graphics {
   readonly renderer = new WebGLRenderer({ antialias: true });
   private readonly composer: EffectComposer;
   private quality: Quality = 'fast';
+  /** Fast and still too slow for the device: an even lower resolution. */
+  private lowest = false;
 
   constructor(
     container: HTMLElement,
@@ -50,8 +54,14 @@ export class Graphics {
     return window.innerHeight * this.renderer.getPixelRatio();
   }
 
+  /** 'lowest' once the fast setting has been stepped down further. */
+  get level(): Quality | 'lowest' {
+    return this.lowest && this.quality === 'fast' ? 'lowest' : this.quality;
+  }
+
   setQuality(quality: Quality): void {
     this.quality = quality;
+    this.lowest = false;
     const settings = SETTINGS[quality];
     const shadow = this.world.sun.shadow;
     if (shadow.mapSize.x !== settings.shadowMap) {
@@ -62,8 +72,14 @@ export class Graphics {
     this.resize();
   }
 
+  /** Steps below fast: fewer pixels, for devices that struggle even then. */
+  lowerResolution(): void {
+    this.lowest = true;
+    this.resize();
+  }
+
   resize(): void {
-    const ratio = Math.min(window.devicePixelRatio, SETTINGS[this.quality].pixelRatio);
+    const ratio = Math.min(window.devicePixelRatio, this.lowest ? LOWEST_PIXEL_RATIO : SETTINGS[this.quality].pixelRatio);
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.composer.setPixelRatio(ratio);

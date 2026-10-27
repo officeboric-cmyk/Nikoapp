@@ -107,6 +107,7 @@ src/
   main.ts                 – pokretanje, glavna petlja, poruke igraču
   core/Input.ts           – tipkovnica i gamepad → kontrole (-1..1), glatko pomicanje palice
   core/Graphics.ts        – iscrtavanje i kvaliteta slike (Brzo / Lijepo: razlučivost, sjene, sjaj)
+  core/AutoQuality.ts     – mjeri glatkoću igre i po potrebi sam smanji kvalitetu slike
   physics/FlightModel.ts  – fizika leta (fiksni korak 120 Hz): sile, uzgon, zakrilca, tlo, more, vjetar
   aircraft/catalog.ts     – 4 aviona: fizika, kamera, zvuk
   aircraft/models.ts      – 3D modeli aviona (trup, krila, rep, kotači, propeler, pilot, svjetla)
@@ -169,6 +170,8 @@ Pad samo vrati avion na pistu. Sletjeti se može i na travu; samo hidroavion smi
 **Slika:** u izborniku je i postavka kvalitete. ⚡ **Brzo** (zadano na mobitelu i tabletu)
 crta izravno na ekran u nešto manjoj razlučivosti. ✨ **Lijepo** (zadano na računalu) crta
 oštrije, s boljim sjenama i blagim sjajem (bloom) oko sunca, odsjaja na moru i svjetala noću.
+Ako uređaj ne stigne crtati glatko (ispod ~28 sličica u sekundi), igra sama prijeđe na Brzo, a ako
+ni to nije dovoljno, još malo smanji razlučivost. Kad sam izabereš postavku, igra je više ne mijenja.
 
 ## Faze
 

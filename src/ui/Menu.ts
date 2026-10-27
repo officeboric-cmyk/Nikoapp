@@ -77,6 +77,8 @@ export class Menu {
   /** How true to life the flying is (see FlightModel). */
   realism: Realism;
   quality: Quality;
+  /** True once the player picked a picture setting themselves: it is then never changed for them. */
+  qualityChosen: boolean;
   /** Phones and tablets: steer by tilting the device. */
   tilt: boolean;
 
@@ -98,6 +100,7 @@ export class Menu {
     const coarse = window.matchMedia('(pointer: coarse)').matches;
     this.tilt = saved?.steering === 'tilt';
     this.quality = QUALITIES.find((q) => q.id === saved?.quality)?.id ?? (coarse ? 'fast' : 'pretty');
+    this.qualityChosen = saved?.qualityChosen === true;
 
     // Time of day and weather apply straight away, so the scene behind the menu shows them.
     const pick = () => {
@@ -128,6 +131,7 @@ export class Menu {
     for (const { id, label } of QUALITIES) {
       pill(document.getElementById('env-quality')!, id, label, () => {
         this.quality = id;
+        this.qualityChosen = true;
         this.save();
         this.render();
         this.handlers.onQuality(id);
@@ -320,6 +324,13 @@ export class Menu {
     );
   }
 
+  /** The game switched the picture setting itself (the device was too slow). */
+  autoQuality(quality: Quality): void {
+    this.quality = quality;
+    this.save();
+    this.render();
+  }
+
   private save(): void {
     try {
       const saved = {
@@ -332,6 +343,7 @@ export class Menu {
         controls: this.realControls ? 'real' : 'simple',
         realism: this.realism,
         quality: this.quality,
+        qualityChosen: this.qualityChosen,
         steering: this.tilt ? 'tilt' : 'stick',
       };
       localStorage.setItem(CHOICE_KEY, JSON.stringify(saved));
@@ -404,6 +416,7 @@ interface SavedChoice {
   controls?: string;
   realism?: string;
   quality?: string;
+  qualityChosen?: boolean;
   steering?: string;
 }
 
