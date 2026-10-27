@@ -27,6 +27,7 @@ export interface AircraftSpec {
   turnRate: number; // rad/s heading change at a 90° bank (arcade only)
   gearHeight: number; // m from the plane's origin down to the wheels
   wingspan: number; // m, sets how close to the ground the cushion of air (ground effect) starts
+  maxLoad: number; // g, the most the wings may be loaded: pulling harder than this stops working
   floats: boolean; // a seaplane: can land on and take off from water
   retractableGear?: boolean; // the wheels can be pulled up in flight
   bellyHeight?: number; // m from the plane's origin down to its belly (a wheels-up landing)
@@ -86,6 +87,20 @@ const NORMAL_HOLD_HEIGHT = 0.4; // pitch input per m/s of climb or sink, when th
 const STALL_PROTECTION = 0.85; // normal: back stick fades out as the wing nears this share of its stall angle
 const SPEED_PROTECTION = 0.15; // normal: ...and as the speed falls to within this share of the stall speed
 const NORMAL_TURN_PULL = 0.75; // back stick added per unit of extra lift a level turn needs (1/cos(bank) − 1)
+const DIHEDRAL = 1.2; // rad/s of roll per radian of sideslip: the upwind wing lifts (so the rudder banks the plane too)
+const LOAD_SOFTNESS = 0.5; // g over which back stick fades out as the load nears the plane's limit
+// --- realistic: trim and the stall ---
+const TRIM_RANGE = { min: MathUtils.degToRad(-3), max: MathUtils.degToRad(9) }; // angles of attack the trim can hold
+const WING_DROP = 0.8; // rad/s of roll when deep in a stall (a wing stalls first and drops)
+const REALISTIC_FULL_CONTROL = 2; // × stall speed where the controls reach full effect
+
+const TAIL_STIFFNESS = 2.5;
+const ELEVATOR_UP = MathUtils.degToRad(20); // realistic: full back stick raises the angle of attack this far above trim
+const ELEVATOR_DOWN = MathUtils.degToRad(14); // ...and full forward stick lowers it this far
+// Realistic engines push about half as hard as the game's (closer to real planes, so full power
+// climbs at a sensible angle); the drag shrinks with them, so the top speed stays the same.
+const REALISTIC_THRUST = 0.5; // realistic: a real tail holds the trimmed angle of attack much more firmly
+const TAIL_FULL_EFFECT = 1.5; // × stall speed where the tail's pull into the airflow is at its usual strength
 
 const FORWARD = new Vector3(0, 0, -1);
 const RIGHT = new Vector3(1, 0, 0);
@@ -130,6 +145,12 @@ export class FlightModel {
   readonly surfaces = { pitch: 0, roll: 0, yaw: 0 };
   /** Angle between the nose and the airflow, radians (normal / realistic). */
   angleOfAttack = 0;
+  /**
+   * Realistic: the angle of attack the plane settles to by itself. Let go of the stick and the
+   * trim is set to fly on at the current speed, as a pilot trims after changing speed.
+   */
+  trim = TRIM_ANGLE;
+  private pitchHeld = false;
   private gearTarget = 1;
   private flapStage = 0;
   private time = 0;
@@ -151,6 +172,14 @@ export class FlightModel {
     this.flaps = this.flapStage = 0;
     this.bellyLanded = false;
     this.angleOfAttack = 0;
+    this.trim = TRIM_ANGLE;
+    this.pitchHeld = false;
+  }
+
+  /** The angle of attack that holds the plane up (1 g) at this airspeed with the flaps as they are. */
+  private trimFor(airspeed: number): number {
+    const needed = (this.spec.stallSpeed / Math.max(airspeed, 1)) ** 2 - CL_FLAPS * this.flaps;
+    return MathUtils.clamp(((needed - CL_ZERO) / (1 - CL_ZERO)) * STALL_ANGLE, TRIM_RANGE.min, TRIM_RANGE.max);
   }
 
   /** True when the wheels are down or on their way down. */
@@ -203,9 +232,14 @@ export class FlightModel {
     return this.contact(events, ground);
   }
 
+  /** The engine's full push, m/s². */
+  private get maxThrust(): number {
+    return this.spec.maxThrust * (this.realism === 'realistic' ? REALISTIC_THRUST : 1);
+  }
+
   private dragFactor(): number {
     const s = this.spec;
-    const clean = (s.maxThrust / (s.maxSpeed * s.maxSpeed)) * (1 - GEAR_DRAG_SAVING * (1 - this.gear));
+    const clean = (this.maxThrust / (s.maxSpeed * s.maxSpeed)) * (1 - GEAR_DRAG_SAVING * (1 - this.gear));
     return clean * (1 + FLAP_DRAG * this.flaps);
   }
 
@@ -247,7 +281,7 @@ export class FlightModel {
     // 0 = no lift at all, 1 = wings fully flying.
     const lift = MathUtils.smoothstep(this.speed, stallSpeed * 0.6, stallSpeed);
 
-    let accel = this.throttle * s.maxThrust - this.dragFactor() * this.speed * this.speed - GRAVITY_ALONG_PATH * fwd.y;
+    let accel = this.throttle * this.maxThrust - this.dragFactor() * this.speed * this.speed - GRAVITY_ALONG_PATH * fwd.y;
     if (this.onGround) {
       const onWater = ground.heightAt(this.position.x, this.position.z) < SEA_LEVEL;
       const friction = this.bellyLanded ? BELLY_FRICTION : onWater ? WATER_FRICTION : ROLLING_FRICTION;
@@ -329,7 +363,7 @@ export class FlightModel {
 
     // --- forces ---
     force.set(0, -G, 0);
-    force.addScaledVector(fwd, this.throttle * s.maxThrust);
+    force.addScaledVector(fwd, this.throttle * this.maxThrust);
     liftDir.crossVectors(right, airDir).normalize(); // perpendicular to the airflow, towards the canopy
     force.addScaledVector(liftDir, lift);
     const drag = this.dragFactor() * airspeed * airspeed + INDUCED_DRAG * lift * Math.max(cl, 0);
@@ -340,9 +374,24 @@ export class FlightModel {
 
     // --- rotation: the pilot, plus the plane's own stability ---
     const stallSpeed = this.currentStallSpeed;
-    const authority = MathUtils.clamp(0.25 + 0.75 * (airspeed / (1.3 * stallSpeed)) ** 2, 0.25, 1);
+    // How much the controls bite. Realistic: like real control surfaces, with the dynamic pressure,
+    // so they are soft at landing speeds and only reach full effect at twice the stall speed.
+    const authority = helped
+      ? MathUtils.clamp(0.25 + 0.75 * (airspeed / (1.3 * stallSpeed)) ** 2, 0.25, 1)
+      : MathUtils.clamp((airspeed / (REALISTIC_FULL_CONTROL * stallSpeed)) ** 2, 0.15, 1);
     this.stalled = alpha > STALL_ANGLE || airspeed < stallSpeed * 0.85;
     const input = { pitch: c.pitch, roll: c.roll };
+    // Pulling can't load the wings past the plane's limit: the back stick fades out near it.
+    const load = lift / G;
+    if (input.pitch > 0) input.pitch *= MathUtils.clamp((s.maxLoad - load) / LOAD_SOFTNESS, 0, 1);
+    if (!helped) {
+      // Auto-trim: letting go of the stick trims the plane to fly on at this speed.
+      if (Math.abs(c.pitch) > 0.3) this.pitchHeld = true;
+      else if (this.pitchHeld && Math.abs(c.pitch) < 0.05) {
+        this.pitchHeld = false;
+        this.trim = this.trimFor(airspeed);
+      }
+    }
     if (helped) {
       // Let go and the wings level and the plane holds its height.
       if (input.roll === 0) input.roll = MathUtils.clamp(right.y * NORMAL_LEVEL_ROLL, -1, 1);
@@ -362,11 +411,24 @@ export class FlightModel {
     }
     const gust = this.gusts();
     // The nose weathervanes into the airflow, harder when stalled so it drops and the plane recovers.
-    const pitchBack = (TRIM_ANGLE - alpha) * PITCH_STABILITY * (this.stalled ? 3 : 1);
-    const total = { pitch: input.pitch + gust.pitch + pitchBack / s.pitchRate, roll: input.roll + gust.roll };
+    // Realistic: the elevator moves the angle of attack the tail settles the wing at (back stick = more, up to past the stall).
+    const target = helped ? TRIM_ANGLE : this.trim + input.pitch * (input.pitch > 0 ? ELEVATOR_UP : ELEVATOR_DOWN);
+    const pitchBack = (target - alpha) * PITCH_STABILITY * (helped && this.stalled ? 3 : 1);
+    // Sliding sideways rolls the plane away from the slip (the wings' dihedral).
+    const dihedralRoll = (-sideslip * DIHEDRAL * authority) / s.rollRate;
+    // Deep in a stall one wing quits first and the plane rolls off (left, with the propeller's torque, unless slipping).
+    const wingDrop = helped ? 0 : (MathUtils.clamp((alpha - STALL_ANGLE) / 0.15, 0, 1) * WING_DROP * (sideslip > 0.01 ? 1 : -1)) / s.rollRate;
+    // Normal: the nose's pull back to the airflow goes through the same (speed-limited) controls.
+    // Realistic: like a real tail, it weakens only in step with the speed, so even a slow plane
+    // noses back into the airflow instead of hanging in a deep stall.
+    const total = { pitch: helped ? input.pitch + gust.pitch + pitchBack / s.pitchRate : gust.pitch, roll: input.roll + gust.roll + dihedralRoll + wingDrop };
     // The limits hold against everything turning the plane (it would otherwise follow its own curving path into a loop).
     if (helped) this.limit(total, NORMAL_LIMITS);
     this.rotate(dt, total.pitch, total.roll, c.yaw, authority, s.yawRate * authority);
+    if (!helped) {
+      const tail = MathUtils.clamp(airspeed / (TAIL_FULL_EFFECT * stallSpeed), 0.4, 2);
+      this.quaternion.multiply(tmpQ.setFromAxisAngle(RIGHT, pitchBack * TAIL_STIFFNESS * tail * dt));
+    }
     this.surfaces.pitch = input.pitch;
     this.surfaces.roll = input.roll;
     // Sideways, the nose swings into the airflow, which is what makes a banked plane turn.
@@ -405,6 +467,7 @@ export class FlightModel {
         this.bellyLanded = !wheelsReady;
         // From now on the wheels roll along the nose at the speed we were going.
         flatFwd.set(fwd.x, 0, fwd.z).normalize();
+        this.trim = TRIM_ANGLE;
         this.speed = Math.max(0, this.velocity.dot(flatFwd));
         events.push(wheelsReady ? 'touchdown' : 'belly');
       } else if (sinks) {
@@ -416,6 +479,8 @@ export class FlightModel {
       this.quaternion.setFromEuler(tmpEuler.set(pitch, heading, 0));
     } else if (this.onGround) {
       this.onGround = false;
+      this.trim = this.trimFor(this.speed); // trimmed to the speed it left the ground at
+      this.pitchHeld = false;
       events.push('takeoff');
     }
     return events;

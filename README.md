@@ -122,8 +122,15 @@ src/
 - ✈️ **Normalno** (zadano) – prave sile: avion ima težinu i zalet, uzgon raste s brzinom i
   kutom krila, u zaokretu treba malo povući. Pomagač izravna krila i drži visinu kad pustiš
   palicu, ne da više od 70° nagiba i 50° nosa, i ne da avionu da izgubi uzgon (stall).
-- 🎓 **Realistično** – bez pomagača: može se napraviti looping, a ako previše povučeš
-  ili jako usporiš, krilo izgubi uzgon i nos padne.
+- 🎓 **Realistično** – bez pomagača, kao pravi avion:
+  - **automatski trim**: kad pustiš palicu, avion nastavi letjeti brzinom koju je imao
+    (gas tada određuje penje li se ili spušta), pa ne moraš stalno držati tipku;
+  - palica mijenja kut krila prema zraku; puna palica natrag dovodi do gubitka uzgona,
+    a tada jedno krilo padne – pusti palicu i avion se izvuče;
+  - kormila su meka pri maloj brzini, kormilo smjera (Q/E) i naginje avion,
+    krila se ne mogu preopteretiti (putnički avion ~2,5 g, mlažnjak ~8 g);
+  - motori su slabiji nego u ostalim načinima (bliže pravim avionima), pa je zalet dulji
+    i penjanje blaže; looping je moguć, ali s putničkim avionom teško.
 
 Zakrilca daju više uzgona pri maloj brzini (ali i više otpora). Blizu tla avion lakše
 lebdi (efekt tla). Vjetar puše i u zraku, pa avion pri slijetanju malo „ide ukoso".
