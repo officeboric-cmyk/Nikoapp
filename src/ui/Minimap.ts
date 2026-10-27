@@ -53,7 +53,7 @@ export class Minimap {
     const ctx = this.ctx;
     ctx.drawImage(this.background, 0, 0);
 
-    if (goal) {
+    if (goal && goal.x !== undefined && goal.z !== undefined) {
       const [gx, gy] = this.toMap(goal.x, goal.z);
       ctx.strokeStyle = '#ff8c42';
       ctx.lineWidth = 3;

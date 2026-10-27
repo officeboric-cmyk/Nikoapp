@@ -560,6 +560,7 @@ body.touch .keys-only {
 
 button {
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent; /* no grey/blue flash over rounded buttons on phones */
 }
 
 #touch-throttle {

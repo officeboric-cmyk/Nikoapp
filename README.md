@@ -6,6 +6,8 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - **6 aerodroma** s pistom (i brojevima na njoj), tornjem, hangarom, terminalom, parkiranim avionima i vjetrokazom
 - **4 aviona**: Mali avion, Mlažnjak, Hidroavion (smije na more!) i Putnički avion
 - **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
+- **🎓 škola letenja**: 5 lekcija korak po korak (polijetanje, zaokreti, gore i dolje, zakrilca, slijetanje),
+  uz savjet što pritisnuti i zvjezdice
 - **12 misija** sa zvjezdicama: prstenovi, pošta, putnički letovi, spašavanje hidroavionom, tura po otocima,
   gašenje požara (hidroavion kliži po moru da napuni vodu i baca je na vatru: tipka `B` ili 💧)
 - ⭐⭐⭐ za slijetanje (mekano, na sredini piste, ravnih krila), 🏝️ otkrivanje otoka
@@ -101,7 +103,8 @@ src/
   aircraft/airlines.ts    – aviokompanije i njihove boje
   aircraft/Aircraft.ts    – vidljivi avion koji prati fiziku
   game/missions.ts        – popis misija (lako dodati nove)
-  game/MissionRun.ts      – tijek misije: prstenovi, slijetanja, brodić, tura, zvjezdice
+  game/MissionRun.ts      – tijek misije: prstenovi, slijetanja, brodić, tura, požar, zvjezdice
+  game/lessons.ts         – škola letenja: lekcije i koraci
   game/landing.ts         – ocjena slijetanja (1–3 zvjezdice)
   game/hillWarning.ts     – upozorenje „Pazi, brdo!"
   game/collisions.ts      – sudari s drugim avionima i upozorenje „Pazi, avion ispred!"

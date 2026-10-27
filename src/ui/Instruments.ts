@@ -1,10 +1,11 @@
 import { Vector3 } from 'three';
 import type { FlightModel } from '../physics/FlightModel';
 
+/** What the top pill shows: a name, and an arrow and distance when it is a place. */
 export interface Target {
   name: string;
-  x: number;
-  z: number;
+  x?: number;
+  z?: number;
 }
 
 const COMPASS = ['S', 'SI', 'I', 'JI', 'J', 'JZ', 'Z', 'SZ']; // sjever, sjeveroistok, istok, …
@@ -42,12 +43,16 @@ export class Instruments {
       return;
     }
     this.targetBox.classList.remove('hidden');
-    const dx = target.x - model.position.x;
-    const dz = target.z - model.position.z;
-    const turn = Math.atan2(dx, -dz) - bearing; // how far to turn, + = to the right
-    this.targetArrow.style.transform = `rotate(${turn}rad)`;
-    const km = (Math.hypot(dx, dz) / 1000).toFixed(1).replace('.', ',');
-    const text = `${target.name} · ${km} km`;
+    const place = target.x !== undefined && target.z !== undefined;
+    this.targetArrow.classList.toggle('hidden', !place);
+    let text = target.name;
+    if (place) {
+      const dx = target.x! - model.position.x;
+      const dz = target.z! - model.position.z;
+      const turn = Math.atan2(dx, -dz) - bearing; // how far to turn, + = to the right
+      this.targetArrow.style.transform = `rotate(${turn}rad)`;
+      text += ` · ${(Math.hypot(dx, dz) / 1000).toFixed(1).replace('.', ',')} km`;
+    }
     if (text !== this.lastText) {
       this.targetText.textContent = text;
       this.lastText = text;

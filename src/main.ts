@@ -10,6 +10,7 @@ import { collision, planeAhead } from './game/collisions';
 import { hillAhead } from './game/hillWarning';
 import { scoreLanding, starText } from './game/landing';
 import { MissionRun, type MissionResult, type MissionUpdate } from './game/MissionRun';
+import { LESSONS, LessonRun, type LessonDef, type Words } from './game/lessons';
 import { MISSIONS, type MissionDef } from './game/missions';
 import { Progress } from './game/Progress';
 import { FlightModel, SEA_LEVEL, type FlightEvent } from './physics/FlightModel';
@@ -60,11 +61,13 @@ let paused = false;
 let hasFlown = false;
 let respawnAt = Infinity;
 let accumulator = 0;
-let mission: MissionRun | null = null;
+/** The mission or flight-school lesson being flown, if any. */
+let mission: MissionRun | LessonRun | null = null;
 
-const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, {
+const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, LESSONS, progress, {
   onStart: startFreeFlight,
   onMission: startMission,
+  onLesson: startLesson,
   onEnvironment: setEnvironment,
   onControls: setControls,
   onRealism: (realism) => (model.realism = realism),
@@ -92,6 +95,25 @@ function startMission(def: MissionDef): void {
   mission = new MissionRun(def, scene, terrain, picked.airport, effects);
   dropButton.classList.toggle('hidden', !mission.canDrop);
   hud.flash(`${def.emoji} ${def.brief}`, timer.getElapsed(), 5);
+}
+
+function startLesson(def: LessonDef): void {
+  endMission();
+  const picked: Choice = {
+    aircraft: AIRCRAFT.find((a) => a.id === 'trainer')!,
+    airline: airlineById(undefined),
+    airport: terrain.airports.find((a) => a.name === def.start)!,
+  };
+  begin(picked);
+  mission = new LessonRun(def, picked.airport);
+  respawn(); // lessons in the air start up there
+  hud.flash(`${def.emoji} ${def.title}: ${def.brief}`, timer.getElapsed(), 4);
+}
+
+/** "Starting over" in the words of what is being flown. */
+function againText(): string {
+  if (!mission) return 'Idemo opet…';
+  return mission instanceof LessonRun ? 'Lekcija kreće ispočetka…' : 'Misija kreće ispočetka…';
 }
 
 /** Runs inside the click / key press that started the flight, so the browser lets the sound start. */
@@ -137,11 +159,18 @@ function completeMission(result: MissionResult): void {
   sound.reward();
 }
 
-document.getElementById('md-again')!.addEventListener('click', () => startMission(mission!.def));
-document.getElementById('md-missions')!.addEventListener('click', () => {
-  endMission();
-  menu.show('missions');
+document.getElementById('md-again')!.addEventListener('click', () => {
+  if (mission instanceof LessonRun) startLesson(mission.def);
+  else if (mission) startMission(mission.def);
 });
+document.getElementById('md-missions')!.addEventListener('click', backToList);
+
+/** From the "mission done" card back to the list it came from. */
+function backToList(): void {
+  const tab = mission instanceof LessonRun ? 'school' : 'missions';
+  endMission();
+  menu.show(tab);
+}
 document.getElementById('md-free')!.addEventListener('click', () => {
   // Carry on flying freely from where the mission ended.
   dropFocus();
@@ -230,6 +259,7 @@ function respawn(): void {
   model.reset(choice.airport.spawnPoint(), choice.airport.heading);
   progress.discover(choice.airport.name); // the island you start on doesn't need discovering
   mission?.restart();
+  if (mission instanceof LessonRun) mission.placeStart(model);
   aircraft!.update(model, 0);
   rig.snap(model);
   touch.reset();
@@ -331,8 +361,7 @@ function cycleCamera(): void {
 function toggleMenu(): void {
   dropFocus();
   if (!missionDone.classList.contains('hidden')) {
-    endMission();
-    menu.show('missions');
+    backToList();
   } else if (!menu.visible) {
     setPaused(true);
     menu.show();
@@ -374,17 +403,17 @@ function handleEvents(events: FlightEvent[], now: number): void {
       hud.flash('Ups, zaboravio si kotače! 🛞 Avion klizi po trbuhu…', now, 4, true);
       sound.scrape();
     } else if (event === 'crash') {
-      hud.flash(mission ? 'Bum! Misija kreće ispočetka…' : 'Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
+      hud.flash(mission ? `Bum! ${againText()}` : 'Bum! Ništa strašno, idemo opet…', now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
       effects.crash(model);
       sound.crash();
     } else if (event === 'collision') {
-      hud.flash(`Bum! Sudar s drugim avionom 💥 ${mission ? 'Misija kreće ispočetka…' : 'Idemo opet…'}`, now, RESPAWN_DELAY, true);
+      hud.flash(`Bum! Sudar s drugim avionom 💥 ${againText()}`, now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
       effects.crash(model);
       sound.crash();
     } else if (event === 'splash') {
-      hud.flash(`Pljus! 🌊 Ovaj avion ne zna plivati. ${mission ? 'Misija kreće ispočetka…' : 'Idemo opet…'}`, now, RESPAWN_DELAY, true);
+      hud.flash(`Pljus! 🌊 Ovaj avion ne zna plivati. ${againText()}`, now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
       effects.splash(model);
       sound.splash();
@@ -421,6 +450,10 @@ function updateHint(now: number, altitude: number): void {
   if (!model.onGround && planeAhead(model, traffic.obstacles)) return hud.hint('✈️ Pazi, avion ispred! Skreni ili promijeni visinu', now, true);
   const landingWithoutWheels = model.spec.retractableGear && !model.gearDown && !model.onGround && altitude < GEAR_WARNING_HEIGHT && model.velocity.y < -1;
   if (landingWithoutWheels) return hud.hint(say('🛞 Izvuci kotače (G)!', '🛞 Izvuci kotače (gumb 🛞)!'), now, true);
+  if (mission instanceof LessonRun) {
+    const words: Words = { touch: touch.enabled, noseUp: say(upKeys, upStick), noseDown: say(downKeys, downStick) };
+    return hud.hint(mission.tip(words), now);
+  }
   if (model.onGround && !hasFlown) {
     if (model.throttle < 0.3 && model.speed < 5) return hud.hint(`${say('Drži R za gas', 'Povuci GAS gore')}! 🚀`, now);
     if (model.speed >= model.spec.rotateSpeed) return hud.hint(say(`Sad drži ${upKeys} i poleti!`, `Sad ${upStick} i poleti!`), now);
@@ -469,7 +502,10 @@ function frame(time: number): void {
     // After sliding to a stop on its belly, the plane goes back to the start.
     if (model.bellyLanded && model.speed < 0.5 && respawnAt === Infinity) respawnAt = now + 2;
     if (now >= respawnAt) respawn();
-    if (mission && !model.crashed) applyMission(mission.update(dt, model), now);
+    if (mission instanceof LessonRun && !model.crashed) {
+      const ground = Math.max(terrain.heightAt(model.position.x, model.position.z), SEA_LEVEL);
+      applyMission(mission.update(dt, model, model.position.y - model.spec.gearHeight - ground), now);
+    } else if (mission && !model.crashed) applyMission(mission.update(dt, model), now);
     checkDiscovery(now);
     aircraft!.update(model, dt);
     rig.update(model, dt);

@@ -2,6 +2,7 @@ import { AIRLINES, airlineById, type Airline } from '../aircraft/airlines';
 import type { AircraftType } from '../aircraft/catalog';
 import type { Realism } from '../physics/FlightModel';
 import { starText } from '../game/landing';
+import type { LessonDef } from '../game/lessons';
 import type { MissionDef } from '../game/missions';
 import type { Progress } from '../game/Progress';
 import type { Airport } from '../world/Airport';
@@ -16,12 +17,13 @@ export interface Choice {
 
 const CHOICE_KEY = 'niko-leti-choice';
 
-type Tab = 'missions' | 'free';
+type Tab = 'missions' | 'school' | 'free';
 
 /** What the menu asks the game to do. */
 export interface MenuHandlers {
   onStart(choice: Choice): void;
   onMission(mission: MissionDef): void;
+  onLesson(lesson: LessonDef): void;
   /** Called at once on a change, so the scene behind the menu shows it. */
   onEnvironment(time: TimeOfDay, weather: Weather): void;
   onControls(realControls: boolean): void;
@@ -80,11 +82,12 @@ export class Menu {
     aircraftTypes: AircraftType[],
     airports: Airport[],
     private readonly missions: MissionDef[],
+    lessons: LessonDef[],
     private readonly progress: Progress,
     private readonly handlers: MenuHandlers,
   ) {
     const saved = loadChoice();
-    this.tab = saved?.tab === 'free' ? 'free' : 'missions';
+    this.tab = saved?.tab === 'free' || saved?.tab === 'school' ? saved.tab : 'missions';
     this.time = TIMES.find((t) => t.id === saved?.time)?.id ?? 'day';
     this.weather = WEATHERS.find((w) => w.id === saved?.weather)?.id ?? 'clear';
     this.realControls = saved?.controls !== 'simple';
@@ -159,6 +162,18 @@ export class Menu {
       });
       button.dataset.id = mission.id;
       button.append(span('emoji', mission.emoji), bold(mission.title), span('stars', ''), small(mission.brief));
+    }
+
+    const lessonList = document.getElementById('menu-lessons')!;
+    for (const lesson of lessons) {
+      const button = choiceButton(lessonList, () => {
+        this.hide();
+        (document.activeElement as HTMLElement | null)?.blur();
+        this.save();
+        this.handlers.onLesson(lesson);
+      });
+      button.dataset.id = lesson.id;
+      button.append(span('emoji', lesson.emoji), bold(lesson.title), span('stars', ''), small(lesson.brief));
     }
 
     this.aircraft = aircraftTypes.find((a) => a.id === saved?.aircraft) ?? aircraftTypes[0];
@@ -281,6 +296,10 @@ export class Menu {
       button.classList.toggle('selected', button.dataset.id === this.weather);
     }
     document.getElementById('tab-missions')!.classList.toggle('hidden', this.tab !== 'missions');
+    document.getElementById('tab-school')!.classList.toggle('hidden', this.tab !== 'school');
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('#menu-lessons .choice')) {
+      button.querySelector('.stars')!.textContent = starText(this.progress.missionStars(button.dataset.id!));
+    }
     document.getElementById('tab-free')!.classList.toggle('hidden', this.tab !== 'free');
 
     let stars = 0;
