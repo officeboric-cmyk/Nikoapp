@@ -1,5 +1,6 @@
 import {
   AdditiveBlending,
+  MathUtils,
   BoxGeometry,
   CylinderGeometry,
   DoubleSide,
@@ -19,7 +20,7 @@ import type { Terrain } from '../world/Terrain';
 import type { LandingResult } from './landing';
 import { formatTime, timeStars, type Goal, type MissionDef } from './missions';
 
-const RING_RADIUS = 22; // m, generous so kids get through
+const RING_RADIUS = 30; // m, generous so kids get through (the plane carries on a little in turns)
 const RING_CLEARANCE = 60; // m kept between a ring and the ground under it
 const SPLASHDOWN_RADIUS = 250; // m from the spot that counts as "next to it"
 const STOPPED = 4; // m/s, slow enough to count as stopped on the water
@@ -120,7 +121,7 @@ export class MissionRun {
 
     if (goal.kind === 'rings') {
       const ring = this.rings[this.nextRing];
-      if (ring.position.distanceTo(model.position) < RING_RADIUS + 4) {
+      if (ring.position.distanceTo(model.position) < RING_RADIUS + 6) {
         this.nextRing++;
         this.refreshVisuals();
         if (this.nextRing === goal.count) return this.finish(timeStars(this.elapsed, goal.par), `Vrijeme: ${formatTime(this.elapsed)}`);
@@ -193,18 +194,44 @@ export class MissionRun {
     }
   }
 
-  /** Rings evenly around the island, starting on the side the plane comes from and going clockwise. */
+  /**
+   * Rings evenly around the island. The first ring and the way round are chosen so the plane
+   * arrives along the circle rather than straight at its middle: no sharp turn after the first ring.
+   */
   private buildRings(goal: Extract<Goal, { kind: 'rings' }>): void {
     const island = ISLANDS.find((i) => i.name === goal.around)!;
-    const fromX = this.start.center.x - island.x;
-    const fromZ = this.start.center.z - island.z;
-    // Starting on the island itself: put the first ring straight ahead of the runway.
-    const startBearing =
-      Math.hypot(fromX, fromZ) < goal.radius ? -this.start.heading : Math.atan2(fromX, -fromZ);
+    const start = this.start.center;
+    const runwayX = -Math.sin(this.start.heading);
+    const runwayZ = -Math.cos(this.start.heading);
+    const startsInside = Math.hypot(start.x - island.x, start.z - island.z) < goal.radius;
+
+    let startBearing = 0;
+    let direction = 1; // 1 = clockwise (seen from above), -1 = anticlockwise
+    let bestScore = -Infinity;
+    for (let deg = 0; deg < 360; deg += 5) {
+      const bearing = MathUtils.degToRad(deg);
+      const x = island.x + Math.sin(bearing) * goal.radius;
+      const z = island.z - Math.cos(bearing) * goal.radius;
+      const distance = Math.hypot(x - start.x, z - start.z);
+      const toRingX = (x - start.x) / distance;
+      const toRingZ = (z - start.z) / distance;
+      // Taking off inside the circle, the plane comes along the runway; otherwise straight from the airport.
+      const [inX, inZ] = startsInside ? [runwayX, runwayZ] : [toRingX, toRingZ];
+      const ahead = startsInside ? toRingX * runwayX + toRingZ * runwayZ : 0;
+      for (const dir of [1, -1]) {
+        // The circle's direction of travel at this ring.
+        const score = dir * (Math.cos(bearing) * inX + Math.sin(bearing) * inZ) + ahead - distance / 20000;
+        if (score > bestScore) {
+          bestScore = score;
+          startBearing = bearing;
+          direction = dir;
+        }
+      }
+    }
 
     const positions: Vector3[] = [];
     for (let i = 0; i < goal.count; i++) {
-      const bearing = startBearing + (i / goal.count) * Math.PI * 2 * 0.9;
+      const bearing = startBearing + direction * (i / goal.count) * Math.PI * 2 * 0.9;
       const x = island.x + Math.sin(bearing) * goal.radius;
       const z = island.z - Math.cos(bearing) * goal.radius;
       const wave = Math.sin(i * 1.3) * goal.altitude * 0.25; // a little up and down to keep it fun

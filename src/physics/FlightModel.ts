@@ -2,24 +2,31 @@ import { Euler, MathUtils, Quaternion, Vector3 } from 'three';
 import type { Controls } from '../core/Input';
 
 /**
- * Arcade flight model tuned for kids: the plane flies where its nose points,
- * levels itself when you let go of the keys, and only loses lift (stalls)
- * when it gets really slow.
+ * Flight model with three levels of realism:
+ *
+ * - arcade: the plane flies exactly where its nose points, levels itself and can't loop.
+ * - normal: real forces (thrust, lift from the wing's angle to the air, drag, gravity), so
+ *   the plane has momentum, drifts in turns and stalls when the nose is too high, but
+ *   it still levels its wings and holds its height when you let go, within limits.
+ * - realistic: the same forces with no help at all: no levelling, no limits, loops allowed.
  *
  * Axes: the plane's nose is local -Z, up is +Y, right wing is +X.
  */
 
+export type Realism = 'arcade' | 'normal' | 'realistic';
+
 export interface AircraftSpec {
   maxThrust: number; // m/s² acceleration at full throttle
   maxSpeed: number; // m/s top speed in level flight
-  stallSpeed: number; // m/s below this the wings start losing lift
+  stallSpeed: number; // m/s, slowest the wing can hold the plane up (flaps up)
   rotateSpeed: number; // m/s needed before the nose can lift on the runway
   pitchRate: number; // rad/s
   rollRate: number; // rad/s
   yawRate: number; // rad/s, rudder in the air
   groundSteerRate: number; // rad/s, nose wheel on the runway
-  turnRate: number; // rad/s heading change at a 90° bank
+  turnRate: number; // rad/s heading change at a 90° bank (arcade only)
   gearHeight: number; // m from the plane's origin down to the wheels
+  wingspan: number; // m, sets how close to the ground the cushion of air (ground effect) starts
   floats: boolean; // a seaplane: can land on and take off from water
   retractableGear?: boolean; // the wheels can be pulled up in flight
   bellyHeight?: number; // m from the plane's origin down to its belly (a wheels-up landing)
@@ -36,26 +43,49 @@ export const FLAT_GROUND: Ground = { heightAt: () => 0 };
 export type FlightEvent = 'takeoff' | 'touchdown' | 'belly' | 'crash' | 'splash';
 export type GearCommand = 'up' | 'down' | 'fixed' | 'on-ground';
 
-const GRAVITY_ALONG_PATH = 9.81 * 0.6; // softened: climbing slows you, diving speeds you up
-const MAX_SINK = 12; // m/s sink rate when fully stalled
+export const FLAP_STAGES = [0, 0.5, 1];
+
+const G = 9.81;
 const THROTTLE_RATE = 0.5; // throttle change per second while a key is held
 const THROTTLE_FOLLOW = 1.5; // throttle change per second towards a touch slider position
 const ROLLING_FRICTION = 0.5; // m/s²
 const WATER_FRICTION = 2; // m/s², floats drag more than wheels
 const BRAKE_DECEL = 6; // m/s²
-const AUTO_LEVEL_ROLL = 1.5;
-const AUTO_LEVEL_PITCH = 0.8;
-const STALL_NOSE_DROP = 1.5;
-const MAX_BANK = MathUtils.degToRad(60); // no rolling upside down
-const MAX_PITCH = MathUtils.degToRad(45); // no loops
+const BELLY_FRICTION = 4; // m/s², sliding on the belly after a wheels-up landing
+const GEAR_TIME = 3; // s for the wheels to go fully up or down
+const GEAR_DRAG_SAVING = 0.15; // less drag with the wheels up, so a little more top speed
+const FLAP_TIME = 2; // s for the flaps to move fully
 const CRASH_SINK = 7; // m/s vertical speed a touchdown can survive
 const CRASH_BANK = 0.5; // sin of the bank angle a touchdown can survive (~30°)
 const CRASH_NOSE_DOWN = -0.3; // sin of the pitch angle a touchdown can survive
 const CRASH_SLOPE = 0.35; // steepest hillside (rise over run) a touchdown can survive
 const LIFTOFF_CLIMB = 0.3; // m/s upward speed that counts as leaving the ground
-const GEAR_TIME = 3; // s for the wheels to go fully up or down
-const GEAR_DRAG_SAVING = 0.15; // less drag with the wheels up, so a little more top speed
-const BELLY_FRICTION = 4; // m/s², sliding on the belly after a wheels-up landing
+
+// --- arcade ---
+const GRAVITY_ALONG_PATH = G * 0.6; // softened: climbing slows you, diving speeds you up
+const MAX_SINK = 12; // m/s sink rate when fully stalled
+const AUTO_LEVEL_ROLL = 1.5;
+const AUTO_LEVEL_PITCH = 0.8;
+const STALL_NOSE_DROP = 1.5;
+const ARCADE_LIMITS = { bank: MathUtils.degToRad(60), pitch: MathUtils.degToRad(45) };
+
+// --- normal / realistic: the wing ---
+const STALL_ANGLE = MathUtils.degToRad(15); // angle of attack where the wing gives most lift
+const CL_ZERO = 0.25; // lift (as a share of the most) with the wing flat to the air
+const CL_FLAPS = 0.25; // extra lift with full flaps (so a slower stall)
+const FLAP_DRAG = 0.6; // extra drag with full flaps, as a share of the clean drag
+const INDUCED_DRAG = 0.08; // drag that comes with making lift
+const SIDE_GRIP = 0.8; // 1/s, the fuselage resisting sliding sideways (kept small: it mustn't hold the plane up)
+const PITCH_STABILITY = 1.5; // 1/s, how strongly the nose weathervanes back to the airflow
+const YAW_STABILITY = 6; // 1/s, how strongly the nose swings into the airflow sideways (the fin)
+const TRIM_ANGLE = 0.02; // rad, the angle of attack the plane settles to by itself
+const GROUND_EFFECT = 0.25; // extra lift right on the ground, fading out at half a wingspan up
+const NORMAL_LIMITS = { bank: MathUtils.degToRad(70), pitch: MathUtils.degToRad(50) };
+const NORMAL_LEVEL_ROLL = 0.8;
+const NORMAL_HOLD_HEIGHT = 0.4; // pitch input per m/s of climb or sink, when the stick is let go
+const STALL_PROTECTION = 0.85; // normal: back stick fades out as the wing nears this share of its stall angle
+const SPEED_PROTECTION = 0.15; // normal: ...and as the speed falls to within this share of the stall speed
+const NORMAL_TURN_PULL = 0.75; // back stick added per unit of extra lift a level turn needs (1/cos(bank) − 1)
 
 const FORWARD = new Vector3(0, 0, -1);
 const RIGHT = new Vector3(1, 0, 0);
@@ -63,18 +93,27 @@ const UP = new Vector3(0, 1, 0);
 
 const fwd = new Vector3();
 const right = new Vector3();
+const up = new Vector3();
+const air = new Vector3();
+const airDir = new Vector3();
+const liftDir = new Vector3();
+const force = new Vector3();
+const flatFwd = new Vector3();
 const tmpQ = new Quaternion();
 const tmpEuler = new Euler(0, 0, 0, 'YXZ');
 
 export class FlightModel {
   readonly position = new Vector3();
   readonly quaternion = new Quaternion();
+  /** Over the ground, m/s. */
   readonly velocity = new Vector3();
-  speed = 0; // m/s along the nose
+  /** Airspeed (arcade: speed along the nose), m/s. */
+  speed = 0;
   throttle = 0; // 0..1
   onGround = true;
   stalled = false;
   crashed = false;
+  realism: Realism = 'normal';
   /** How the last touchdown went: sink rate (m/s) and sin of the bank angle (+ = right wing down). */
   readonly lastTouchdown = { sink: 0, bank: 0 };
   /** Air movement (m/s) that carries the plane along while it flies. */
@@ -83,9 +122,16 @@ export class FlightModel {
   turbulence = 0;
   /** 1 = wheels down and locked, 0 = fully up; moves smoothly between. */
   gear = 1;
+  /** 0 = flaps up, 1 = fully down; moves smoothly to the chosen stage. */
+  flaps = 0;
   /** Landed without wheels: slides to a stop and can't take off again. */
   bellyLanded = false;
+  /** The stick and pedals as applied last step (-1..1), for moving the control surfaces. */
+  readonly surfaces = { pitch: 0, roll: 0, yaw: 0 };
+  /** Angle between the nose and the airflow, radians (normal / realistic). */
+  angleOfAttack = 0;
   private gearTarget = 1;
+  private flapStage = 0;
   private time = 0;
 
   constructor(readonly spec: AircraftSpec) {}
@@ -102,7 +148,9 @@ export class FlightModel {
     this.stalled = false;
     this.crashed = false;
     this.gear = this.gearTarget = 1;
+    this.flaps = this.flapStage = 0;
     this.bellyLanded = false;
+    this.angleOfAttack = 0;
   }
 
   /** True when the wheels are down or on their way down. */
@@ -118,16 +166,25 @@ export class FlightModel {
     return this.gearTarget === 1 ? 'down' : 'up';
   }
 
+  /** Steps the flaps to the next stage (up → half → full → up) and returns it. */
+  cycleFlaps(): number {
+    this.flapStage = (this.flapStage + 1) % FLAP_STAGES.length;
+    return FLAP_STAGES[this.flapStage];
+  }
+
+  /** The stall speed right now: flaps let the wing fly slower. */
+  get currentStallSpeed(): number {
+    return this.spec.stallSpeed / Math.sqrt(1 + CL_FLAPS * this.flaps);
+  }
+
   /** Advances the simulation by `dt` seconds and returns what happened during the step. */
   step(dt: number, c: Controls, ground: Ground = FLAT_GROUND): FlightEvent[] {
     const events: FlightEvent[] = [];
     if (this.crashed) return events;
-    const s = this.spec;
-
-    fwd.copy(FORWARD).applyQuaternion(this.quaternion);
-    right.copy(RIGHT).applyQuaternion(this.quaternion);
+    this.time += dt;
 
     this.gear += MathUtils.clamp(this.gearTarget - this.gear, -dt / GEAR_TIME, dt / GEAR_TIME);
+    this.flaps += MathUtils.clamp(FLAP_STAGES[this.flapStage] - this.flaps, -dt / FLAP_TIME, dt / FLAP_TIME);
     if (this.bellyLanded) {
       this.throttle = 0;
     } else if (c.throttleSet !== undefined) {
@@ -137,12 +194,59 @@ export class FlightModel {
       this.throttle = MathUtils.clamp(this.throttle + c.throttle * THROTTLE_RATE * dt, 0, 1);
     }
 
-    // 0 = no lift at all, 1 = wings fully flying.
-    const lift = MathUtils.smoothstep(this.speed, s.stallSpeed * 0.6, s.stallSpeed);
+    if (this.realism === 'arcade' || this.onGround) this.stepArcade(dt, c, ground);
+    else this.stepForces(dt, c, ground);
+    return this.contact(events, ground);
+  }
 
-    // --- speed along the nose ---
-    const drag = (s.maxThrust / (s.maxSpeed * s.maxSpeed)) * (1 - GEAR_DRAG_SAVING * (1 - this.gear));
-    let accel = this.throttle * s.maxThrust - drag * this.speed * this.speed - GRAVITY_ALONG_PATH * fwd.y;
+  private dragFactor(): number {
+    const s = this.spec;
+    const clean = (s.maxThrust / (s.maxSpeed * s.maxSpeed)) * (1 - GEAR_DRAG_SAVING * (1 - this.gear));
+    return clean * (1 + FLAP_DRAG * this.flaps);
+  }
+
+  /** Bumps from turbulence, added to the pilot's input: smooth sums of slow waves. */
+  private gusts(): { pitch: number; roll: number } {
+    if (this.onGround || this.turbulence === 0) return { pitch: 0, roll: 0 };
+    const t = this.time;
+    return {
+      pitch: this.turbulence * 0.25 * Math.sin(t * 1.3) * Math.sin(t * 0.47),
+      roll: this.turbulence * 0.35 * Math.sin(t * 1.7 + 1) * Math.sin(t * 0.61),
+    };
+  }
+
+  /** Rotates the plane by the given stick inputs (-1..1), scaled by how much the controls bite. */
+  private rotate(dt: number, pitchIn: number, rollIn: number, yawIn: number, authority: number, yawRate: number): void {
+    const s = this.spec;
+    this.surfaces.pitch = pitchIn;
+    this.surfaces.roll = rollIn;
+    this.surfaces.yaw = yawIn;
+    tmpEuler.set(pitchIn * s.pitchRate * authority * dt, -yawIn * yawRate * dt, -rollIn * s.rollRate * authority * dt);
+    this.quaternion.multiply(tmpQ.setFromEuler(tmpEuler));
+  }
+
+  /** Stops the stick from rolling or pitching past the limits (keeps the plane the right way up). */
+  private limit(input: { pitch: number; roll: number }, limits: { bank: number; pitch: number }): void {
+    const bank = Math.asin(MathUtils.clamp(-right.y, -1, 1)); // + = right wing down
+    if (Math.abs(bank) >= limits.bank && Math.sign(input.roll) === Math.sign(bank)) input.roll = 0;
+    const pitch = Math.asin(MathUtils.clamp(fwd.y, -1, 1));
+    if (Math.abs(pitch) >= limits.pitch && Math.sign(input.pitch) === Math.sign(pitch)) input.pitch = 0;
+  }
+
+  /**
+   * The arcade model (also used by every level on the ground): speed along the nose,
+   * the plane goes where it points.
+   */
+  private stepArcade(dt: number, c: Controls, ground: Ground): void {
+    const s = this.spec;
+    fwd.copy(FORWARD).applyQuaternion(this.quaternion);
+    right.copy(RIGHT).applyQuaternion(this.quaternion);
+    const stallSpeed = this.currentStallSpeed;
+
+    // 0 = no lift at all, 1 = wings fully flying.
+    const lift = MathUtils.smoothstep(this.speed, stallSpeed * 0.6, stallSpeed);
+
+    let accel = this.throttle * s.maxThrust - this.dragFactor() * this.speed * this.speed - GRAVITY_ALONG_PATH * fwd.y;
     if (this.onGround) {
       const onWater = ground.heightAt(this.position.x, this.position.z) < SEA_LEVEL;
       const friction = this.bellyLanded ? BELLY_FRICTION : onWater ? WATER_FRICTION : ROLLING_FRICTION;
@@ -150,58 +254,131 @@ export class FlightModel {
     }
     this.speed = Math.max(0, this.speed + accel * dt);
 
-    // --- control inputs ---
-    let pitchIn = c.pitch;
-    let rollIn = c.roll;
+    const input = { pitch: c.pitch, roll: c.roll };
     let yawIn = c.yaw;
     if (this.onGround) {
       // On the runway left/right steers the nose wheel; there is nothing to roll.
-      yawIn = this.bellyLanded ? 0 : MathUtils.clamp(yawIn + rollIn, -1, 1);
-      rollIn = 0;
-      if (this.speed < s.rotateSpeed || this.bellyLanded) pitchIn = Math.min(pitchIn, 0);
+      yawIn = this.bellyLanded ? 0 : MathUtils.clamp(yawIn + input.roll, -1, 1);
+      input.roll = 0;
+      if (this.speed < s.rotateSpeed || this.bellyLanded) input.pitch = Math.min(input.pitch, 0);
     } else {
       // Let go of the keys and the plane flies straight and level again.
-      if (rollIn === 0) rollIn = MathUtils.clamp(right.y * AUTO_LEVEL_ROLL, -1, 1);
-      if (pitchIn === 0) pitchIn = MathUtils.clamp(-fwd.y * AUTO_LEVEL_PITCH, -1, 1);
+      if (input.roll === 0) input.roll = MathUtils.clamp(right.y * AUTO_LEVEL_ROLL, -1, 1);
+      if (input.pitch === 0) input.pitch = MathUtils.clamp(-fwd.y * AUTO_LEVEL_PITCH, -1, 1);
       // Without lift the nose drops so the plane picks up speed again.
-      pitchIn -= (1 - lift) * STALL_NOSE_DROP;
-
-      // Keep the plane the right way up: stop rolling or pitching past the limits.
-      const bank = Math.asin(MathUtils.clamp(-right.y, -1, 1)); // + = right wing down
-      if (Math.abs(bank) >= MAX_BANK && Math.sign(rollIn) === Math.sign(bank)) rollIn = 0;
-      const pitch = Math.asin(MathUtils.clamp(fwd.y, -1, 1));
-      if (Math.abs(pitch) >= MAX_PITCH && Math.sign(pitchIn) === Math.sign(pitch)) pitchIn = 0;
+      input.pitch -= (1 - lift) * STALL_NOSE_DROP;
+      this.limit(input, ARCADE_LIMITS);
     }
 
     // Controls get mushy as the plane slows down.
     const authority = this.onGround ? 1 : 0.3 + 0.7 * lift;
     const yawRate = this.onGround ? s.groundSteerRate * Math.min(1, this.speed / 6) : s.yawRate * authority;
-    this.time += dt;
-    if (!this.onGround && this.turbulence > 0) {
-      // Smooth, irregular bumps (sums of slow waves), small enough that auto-level copes.
-      const t = this.time;
-      pitchIn += this.turbulence * 0.25 * Math.sin(t * 1.3) * Math.sin(t * 0.47);
-      rollIn += this.turbulence * 0.35 * Math.sin(t * 1.7 + 1) * Math.sin(t * 0.61);
-    }
-    tmpEuler.set(pitchIn * s.pitchRate * authority * dt, -yawIn * yawRate * dt, -rollIn * s.rollRate * authority * dt);
-    this.quaternion.multiply(tmpQ.setFromEuler(tmpEuler));
+    const gust = this.gusts();
+    this.rotate(dt, input.pitch + gust.pitch, input.roll + gust.roll, yawIn, authority, yawRate);
 
     // Banking turns the plane: a coordinated turn without needing the rudder.
-    if (!this.onGround) {
-      this.quaternion.premultiply(tmpQ.setFromAxisAngle(UP, right.y * s.turnRate * lift * dt));
-    }
+    if (!this.onGround) this.quaternion.premultiply(tmpQ.setFromAxisAngle(UP, right.y * s.turnRate * lift * dt));
     this.quaternion.normalize();
 
-    // --- movement ---
     fwd.copy(FORWARD).applyQuaternion(this.quaternion);
-    right.copy(RIGHT).applyQuaternion(this.quaternion);
     this.velocity.copy(fwd).multiplyScalar(this.speed);
+    if (this.onGround && this.realism !== 'arcade') {
+      // Raising the nose isn't enough: the plane leaves the runway only once the wing lifts more than it weighs.
+      const pitch = Math.asin(MathUtils.clamp(fwd.y, -1, 1));
+      if (this.liftAccel(this.speed, pitch, 0) < G) this.velocity.y = Math.min(this.velocity.y, 0);
+    }
     if (!this.onGround) this.velocity.y -= (1 - lift) * MAX_SINK;
     this.position.addScaledVector(this.velocity, dt);
     if (!this.onGround) this.position.addScaledVector(this.wind, dt); // the wind carries you sideways
     this.stalled = !this.onGround && lift < 0.9;
+    this.angleOfAttack = 0;
+  }
 
-    // --- ground and water contact ---
+  /** Lift from the wing as an acceleration, for an airspeed and angle of attack, near the ground or not. */
+  private liftAccel(airspeed: number, alpha: number, heightAboveGround: number): number {
+    const stallSpeed = this.spec.stallSpeed;
+    // Lift grows with the angle up to the stall, then falls away as the airflow breaks off the wing.
+    const a = MathUtils.clamp(alpha, -STALL_ANGLE, STALL_ANGLE);
+    let cl = CL_ZERO + ((1 - CL_ZERO) * a) / STALL_ANGLE + CL_FLAPS * this.flaps;
+    if (alpha > STALL_ANGLE) cl *= 1 - 0.45 * MathUtils.smoothstep(alpha, STALL_ANGLE, STALL_ANGLE + 0.2);
+    const groundEffect = 1 + GROUND_EFFECT * MathUtils.clamp(1 - heightAboveGround / (0.5 * this.spec.wingspan), 0, 1);
+    return G * (airspeed / stallSpeed) ** 2 * cl * groundEffect;
+  }
+
+  /** Normal and realistic: integrate the real forces on the plane. */
+  private stepForces(dt: number, c: Controls, ground: Ground): void {
+    const s = this.spec;
+    const helped = this.realism === 'normal';
+    fwd.copy(FORWARD).applyQuaternion(this.quaternion);
+    right.copy(RIGHT).applyQuaternion(this.quaternion);
+    up.copy(UP).applyQuaternion(this.quaternion);
+
+    // The airflow: our motion through the air (the wind moves the air itself).
+    air.copy(this.velocity).sub(this.wind);
+    const airspeed = Math.max(air.length(), 0.1);
+    airDir.copy(air).divideScalar(airspeed);
+    const alpha = Math.atan2(-air.dot(up), air.dot(fwd)); // + = air hits the wing from below
+    const sideslip = Math.asin(MathUtils.clamp(air.dot(right) / airspeed, -1, 1)); // + = sliding right
+    this.angleOfAttack = alpha;
+    this.speed = airspeed;
+
+    const height = this.position.y - this.spec.gearHeight - Math.max(ground.heightAt(this.position.x, this.position.z), SEA_LEVEL);
+    const lift = this.liftAccel(airspeed, alpha, height);
+    const cl = lift / Math.max(G * (airspeed / s.stallSpeed) ** 2, 1e-6);
+
+    // --- forces ---
+    force.set(0, -G, 0);
+    force.addScaledVector(fwd, this.throttle * s.maxThrust);
+    liftDir.crossVectors(right, airDir).normalize(); // perpendicular to the airflow, towards the canopy
+    force.addScaledVector(liftDir, lift);
+    const drag = this.dragFactor() * airspeed * airspeed + INDUCED_DRAG * lift * Math.max(cl, 0);
+    force.addScaledVector(airDir, -drag);
+    force.addScaledVector(right, -air.dot(right) * SIDE_GRIP); // the fuselage resists sliding sideways
+    if (this.turbulence > 0) force.y += this.turbulence * 2.5 * Math.sin(this.time * 2.1) * Math.sin(this.time * 0.73);
+    this.velocity.addScaledVector(force, dt);
+
+    // --- rotation: the pilot, plus the plane's own stability ---
+    const stallSpeed = this.currentStallSpeed;
+    const authority = MathUtils.clamp(0.25 + 0.75 * (airspeed / (1.3 * stallSpeed)) ** 2, 0.25, 1);
+    this.stalled = alpha > STALL_ANGLE || airspeed < stallSpeed * 0.85;
+    const input = { pitch: c.pitch, roll: c.roll };
+    if (helped) {
+      // Let go and the wings level and the plane holds its height.
+      if (input.roll === 0) input.roll = MathUtils.clamp(right.y * NORMAL_LEVEL_ROLL, -1, 1);
+      if (input.pitch === 0 && !this.stalled) {
+        // Hold the height, and in a bank pull a little, as a pilot does to keep a turn level.
+        const extraLift = 1 / Math.max(Math.cos(Math.asin(MathUtils.clamp(-right.y, -1, 1))), 0.3) - 1;
+        input.pitch = MathUtils.clamp(-this.velocity.y * NORMAL_HOLD_HEIGHT + extraLift * NORMAL_TURN_PULL, -0.6, 0.6);
+      }
+      this.limit(input, NORMAL_LIMITS);
+      // Stall protection (as on many airliners): pulling back stops raising the nose before the wing stalls.
+      // Too slow, it lowers the nose itself so the plane keeps flying.
+      const angleRoom = (STALL_ANGLE * STALL_PROTECTION - alpha) / (STALL_ANGLE * (1 - STALL_PROTECTION));
+      const speedRoom = (airspeed / stallSpeed - 1) / SPEED_PROTECTION;
+      const room = Math.min(angleRoom, speedRoom);
+      if (input.pitch > 0) input.pitch *= MathUtils.clamp(room, 0, 1);
+      if (speedRoom < 0) input.pitch = Math.min(input.pitch, speedRoom);
+    }
+    const gust = this.gusts();
+    // The nose weathervanes into the airflow, harder when stalled so it drops and the plane recovers.
+    const pitchBack = (TRIM_ANGLE - alpha) * PITCH_STABILITY * (this.stalled ? 3 : 1);
+    const total = { pitch: input.pitch + gust.pitch + pitchBack / s.pitchRate, roll: input.roll + gust.roll };
+    // The limits hold against everything turning the plane (it would otherwise follow its own curving path into a loop).
+    if (helped) this.limit(total, NORMAL_LIMITS);
+    this.rotate(dt, total.pitch, total.roll, c.yaw, authority, s.yawRate * authority);
+    this.surfaces.pitch = input.pitch;
+    // Sideways, the nose swings into the airflow, which is what makes a banked plane turn.
+    this.quaternion.multiply(tmpQ.setFromAxisAngle(UP, -sideslip * YAW_STABILITY * authority * dt));
+    this.quaternion.normalize();
+
+    this.position.addScaledVector(this.velocity, dt);
+  }
+
+  /** Touching the ground or the sea: rolling, landing, crashing or splashing. */
+  private contact(events: FlightEvent[], ground: Ground): FlightEvent[] {
+    const s = this.spec;
+    fwd.copy(FORWARD).applyQuaternion(this.quaternion);
+    right.copy(RIGHT).applyQuaternion(this.quaternion);
     const terrain = ground.heightAt(this.position.x, this.position.z);
     const onWater = terrain < SEA_LEVEL;
     const wheelsReady = this.gear >= 0.99;
@@ -211,7 +388,10 @@ export class FlightModel {
       // Below the surface, or rolling along it (also downhill): stay on it.
       this.position.y = floor;
       if (!this.onGround) {
-        const hardLanding = -this.velocity.y > CRASH_SINK;
+        // Sink rate relative to the ground's surface: flying level into a rising hillside counts as hitting it.
+        const groundSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+        const rise = groundSpeed > 1 ? slopeAlong(ground, this.position.x, this.position.z, this.velocity.x / groundSpeed, this.velocity.z / groundSpeed) : 0;
+        const hardLanding = -this.velocity.y + Math.max(0, rise) * groundSpeed > CRASH_SINK;
         const wingFirst = Math.abs(right.y) > CRASH_BANK;
         const noseFirst = fwd.y < CRASH_NOSE_DOWN;
         const hillside = !onWater && slopeAt(ground, this.position.x, this.position.z) > CRASH_SLOPE;
@@ -221,6 +401,9 @@ export class FlightModel {
         this.lastTouchdown.sink = Math.max(0, -this.velocity.y);
         this.lastTouchdown.bank = -right.y;
         this.bellyLanded = !wheelsReady;
+        // From now on the wheels roll along the nose at the speed we were going.
+        flatFwd.set(fwd.x, 0, fwd.z).normalize();
+        this.speed = Math.max(0, this.velocity.dot(flatFwd));
         events.push(wheelsReady ? 'touchdown' : 'belly');
       } else if (sinks) {
         return this.crash(events, 'splash'); // rolled off the runway into the sea
@@ -233,7 +416,6 @@ export class FlightModel {
       this.onGround = false;
       events.push('takeoff');
     }
-
     return events;
   }
 
@@ -244,6 +426,12 @@ export class FlightModel {
     events.push(kind);
     return events;
   }
+}
+
+/** How much the ground rises (rise over run) going in direction (dx, dz) through a point. */
+function slopeAlong(ground: Ground, x: number, z: number, dx: number, dz: number): number {
+  const d = 3;
+  return (ground.heightAt(x + dx * d, z + dz * d) - ground.heightAt(x - dx * d, z - dz * d)) / (2 * d);
 }
 
 /** Steepness of the ground (rise over run) around a point. */

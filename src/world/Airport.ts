@@ -17,6 +17,12 @@ export const RUNWAY_WIDTH = 30; // m
 const FLAT_ALONG = 60; // m of flat ground beyond each runway end
 const FLAT_ACROSS = 110; // m of flat ground beside the runway (room for the buildings)
 const FLAT_BLEND = 220; // m over which the flattened ground blends back into the hills
+// Like real airports: beyond each runway end a corridor where the ground may rise only gently,
+// so planes coming in to land (or climbing out) never meet a hill.
+const APPROACH_LENGTH = 1500; // m from the runway end
+const APPROACH_HALF_WIDTH = 150; // m either side of the runway's centre line
+const APPROACH_GRADE = 0.05; // the ground may rise 5 m per 100 m away from the runway
+const APPROACH_SIDES = 0.6; // how steeply the corridor's sides rise back to the hills
 
 /**
  * One runway plus its buildings. "Along" (u) runs in the take-off direction,
@@ -63,9 +69,18 @@ export class Airport {
     return 1 - MathUtils.smoothstep(Math.hypot(du, dv), 0, FLAT_BLEND);
   }
 
-  /** How far the flattened area can reach from the runway centre. */
+  /** The highest the ground may be at (x, z) to keep the approach corridors clear (Infinity elsewhere). */
+  approachCeiling(x: number, z: number): number {
+    const [u, v] = this.toLocal(x, z);
+    const beyondEnd = Math.abs(u) - this.length / 2 - FLAT_ALONG;
+    if (beyondEnd < 0 || beyondEnd > APPROACH_LENGTH) return Infinity;
+    const outside = Math.max(0, Math.abs(v) - APPROACH_HALF_WIDTH);
+    return this.center.y + beyondEnd * APPROACH_GRADE + outside * APPROACH_SIDES;
+  }
+
+  /** How far the flattened area and approach corridors can reach from the runway centre. */
   get reach(): number {
-    return Math.hypot(this.length / 2 + FLAT_ALONG, RUNWAY_WIDTH / 2 + FLAT_ACROSS) + FLAT_BLEND;
+    return this.length / 2 + FLAT_ALONG + APPROACH_LENGTH;
   }
 
   /** The world point `along` metres down the runway from its middle and `across` metres to its right, at ground level. */

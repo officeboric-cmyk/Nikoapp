@@ -79,6 +79,8 @@ class IslandTerrain {
     if (this.airport) {
       const w = this.airport.flattenWeight(x, z);
       h += (this.airport.center.y - h) * w;
+      // Only ever lowers land (never fills in the sea), to keep the approaches clear.
+      if (h > this.airport.center.y) h = Math.max(this.airport.center.y, Math.min(h, this.airport.approachCeiling(x, z)));
     }
     return h;
   }

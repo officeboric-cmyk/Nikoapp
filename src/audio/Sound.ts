@@ -192,6 +192,12 @@ export class Sound {
     osc(ctx, 'sine', 90, clunkGain, t).stop(t + 0.25);
   }
 
+  /** A short whirr of the flap motors. */
+  flaps(): void {
+    if (!this.ctx) return;
+    this.noiseBurst('bandpass', 500, 0.08, 1.2);
+  }
+
   /** A long scrape: landing on the belly with the wheels up. */
   scrape(): void {
     if (!this.ctx) return;

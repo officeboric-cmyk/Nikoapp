@@ -18,6 +18,8 @@ export class HUD {
   private readonly help = el('help');
   private readonly gearGauge = el('hud-gear-gauge');
   private readonly gearIcon = el('hud-gear');
+  private readonly flapsGauge = el('hud-flaps-gauge');
+  private readonly flapsText = el('hud-flaps-text');
 
   private flashText = '';
   private flashWarn = false;
@@ -29,6 +31,7 @@ export class HUD {
     this.alt.textContent = String(Math.max(0, Math.round(altitude)));
     this.throttle.style.width = `${Math.round(model.throttle * 100)}%`;
     this.updateGear(model);
+    this.updateFlaps(model);
     if (now < this.flashUntil) this.show(this.flashText, this.flashWarn);
   }
 
@@ -55,6 +58,13 @@ export class HUD {
     for (const name of ['down', 'up', 'moving']) this.gearGauge.classList.toggle(name, name === state);
     const icon = state === 'down' ? '⬇' : state === 'up' ? '⬆' : '↕';
     if (this.gearIcon.textContent !== icon) this.gearIcon.textContent = icon;
+  }
+
+  /** Shown only while the flaps are out, with how far. */
+  private updateFlaps(model: FlightModel): void {
+    this.flapsGauge.classList.toggle('hidden', model.flaps < 0.02);
+    const text = `${Math.round(model.flaps * 100)} %`;
+    if (this.flapsText.textContent !== text) this.flapsText.textContent = text;
   }
 
   toggleHelp(): void {

@@ -67,6 +67,7 @@ const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, {
   onMission: startMission,
   onEnvironment: setEnvironment,
   onControls: setControls,
+  onRealism: (realism) => (model.realism = realism),
 });
 const missionDone = document.getElementById('mission-done')!;
 const gearButton = document.getElementById('gear-btn')!;
@@ -187,6 +188,7 @@ function setup(picked: Choice): void {
     aircraft = new Aircraft(picked.aircraft, airline);
     scene.add(aircraft.object);
     model = new FlightModel(picked.aircraft.spec);
+    model.realism = menu.realism;
     model.wind.copy(environment.wind);
     model.turbulence = environment.turbulence;
     rig.distance = picked.aircraft.camera.distance;
@@ -220,6 +222,18 @@ setControls(menu.realControls);
 
 document.getElementById('menu-btn')!.addEventListener('click', toggleMenu);
 document.getElementById('cam-btn')!.addEventListener('click', cycleCamera);
+document.getElementById('flaps-btn')!.addEventListener('click', () => {
+  dropFocus();
+  if (started && !menu.visible && !paused) cycleFlaps();
+});
+
+function cycleFlaps(): void {
+  const stage = model.cycleFlaps();
+  const text = stage === 0 ? '🛬 Zakrilca uvučena' : stage < 1 ? '🛬 Zakrilca: pola' : '🛬 Zakrilca: skroz — za sporo slijetanje';
+  hud.flash(text, timer.getElapsed(), 2);
+  sound.flaps();
+}
+
 gearButton.addEventListener('click', () => {
   dropFocus();
   if (started && !menu.visible && !paused) toggleGear();
@@ -352,19 +366,21 @@ function frame(time: number): void {
   const dt = Math.min(timer.getDelta(), MAX_FRAME);
   const now = timer.getElapsed();
 
+  input.poll(); // gamepad buttons become key taps
   if (input.wasTapped('KeyH')) hud.toggleHelp();
   if (input.wasTapped('Escape')) toggleMenu();
   const playing = started && !menu.visible && missionDone.classList.contains('hidden');
   if (playing) {
     if (input.wasTapped('KeyC')) cycleCamera();
     if (input.wasTapped('KeyG') && !paused) toggleGear();
+    if (input.wasTapped('KeyV') && !paused) cycleFlaps();
     if (input.wasTapped('KeyP')) setPaused(!paused);
     if (input.wasTapped('KeyN')) respawn();
     if (input.wasTapped('KeyM')) hud.flash(sound.toggleMute() ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);
   }
 
   if (playing && !paused) {
-    const controls = touch.apply(input.controls());
+    const controls = touch.apply(input.controls(dt));
     accumulator += dt;
     while (accumulator >= PHYSICS_STEP) {
       handleEvents(model.step(PHYSICS_STEP, controls, terrain), now);

@@ -1,5 +1,6 @@
 import { AIRLINES, airlineById, type Airline } from '../aircraft/airlines';
 import type { AircraftType } from '../aircraft/catalog';
+import type { Realism } from '../physics/FlightModel';
 import { starText } from '../game/landing';
 import type { MissionDef } from '../game/missions';
 import type { Progress } from '../game/Progress';
@@ -24,7 +25,14 @@ export interface MenuHandlers {
   /** Called at once on a change, so the scene behind the menu shows it. */
   onEnvironment(time: TimeOfDay, weather: Weather): void;
   onControls(realControls: boolean): void;
+  onRealism(realism: Realism): void;
 }
+
+const REALISM: { id: Realism; label: string }[] = [
+  { id: 'arcade', label: '🧸 Arkadno' },
+  { id: 'normal', label: '✈️ Normalno' },
+  { id: 'realistic', label: '🎓 Realistično' },
+];
 
 const CONTROL_STYLES = [
   { id: 'real', label: '✈️ Kao u avionu' },
@@ -46,6 +54,8 @@ export class Menu {
   weather: Weather;
   /** Pulling back (↓ / S) lifts the nose, as in a real plane. */
   realControls: boolean;
+  /** How true to life the flying is (see FlightModel). */
+  realism: Realism;
 
   constructor(
     aircraftTypes: AircraftType[],
@@ -59,6 +69,7 @@ export class Menu {
     this.time = TIMES.find((t) => t.id === saved?.time)?.id ?? 'day';
     this.weather = WEATHERS.find((w) => w.id === saved?.weather)?.id ?? 'clear';
     this.realControls = saved?.controls !== 'simple';
+    this.realism = REALISM.find((r) => r.id === saved?.realism)?.id ?? 'normal';
 
     // Time of day and weather apply straight away, so the scene behind the menu shows them.
     const pick = () => {
@@ -76,6 +87,14 @@ export class Menu {
       pill(document.getElementById('env-weather')!, id, label, () => {
         this.weather = id;
         pick();
+      });
+    }
+    for (const { id, label } of REALISM) {
+      pill(document.getElementById('env-realism')!, id, label, () => {
+        this.realism = id;
+        this.save();
+        this.render();
+        this.handlers.onRealism(id);
       });
     }
     for (const { id, label } of CONTROL_STYLES) {
@@ -185,6 +204,7 @@ export class Menu {
         time: this.time,
         weather: this.weather,
         controls: this.realControls ? 'real' : 'simple',
+        realism: this.realism,
       };
       localStorage.setItem(CHOICE_KEY, JSON.stringify(saved));
     } catch {
@@ -198,6 +218,9 @@ export class Menu {
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-time .pill')) {
       button.classList.toggle('selected', button.dataset.id === this.time);
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-realism .pill')) {
+      button.classList.toggle('selected', button.dataset.id === this.realism);
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-controls .pill')) {
       button.classList.toggle('selected', (button.dataset.id === 'real') === this.realControls);
@@ -239,6 +262,7 @@ interface SavedChoice {
   time?: string;
   weather?: string;
   controls?: string;
+  realism?: string;
 }
 
 function loadChoice(): SavedChoice | null {

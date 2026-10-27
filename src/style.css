@@ -686,9 +686,18 @@ body.touch #message {
     display: block;
   }
 
+  /* Upright phone: the buttons may wrap onto a second row, so the map moves below them. */
+  body.touch #topbar {
+    flex-wrap: wrap;
+  }
+
+  body.touch #minimap-box {
+    top: 108px;
+  }
+
   /* Upright phone: tips go under the map, help above the thumb controls. */
   body.touch #message {
-    top: 170px;
+    top: 216px;
     max-width: calc(100% - 32px);
   }
 

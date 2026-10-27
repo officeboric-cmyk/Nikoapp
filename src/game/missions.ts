@@ -86,10 +86,10 @@ export const MISSIONS: MissionDef[] = [
     id: 'rings-volcano',
     emoji: '🌋',
     title: 'Oko vulkana',
-    brief: 'Mlažnjakom proleti kroz 8 prstenova oko Vulkana.',
+    brief: 'Mlažnjakom proleti kroz 8 prstenova oko Vulkana. Uspori malo da lakše skreneš!',
     aircraft: 'jet',
     start: 'Sunčani otok', // its runway points straight at the volcano, away from any hills
-    goal: { kind: 'rings', around: 'Vulkan', radius: 1600, altitude: 260, count: 8, par: 170 },
+    goal: { kind: 'rings', around: 'Vulkan', radius: 1600, altitude: 260, count: 8, par: 210 },
   },
   {
     id: 'lighthouse',

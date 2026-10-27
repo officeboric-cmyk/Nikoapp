@@ -38,6 +38,7 @@ npm run preview  # pokreće gotovi build
 | `A` `←` / `D` `→` | nagib lijevo / desno (na pisti: skretanje) |
 | `Q` / `E` | kormilo |
 | `Razmak` | kočnica |
+| `V` | zakrilca: 0 → pola → puno (sporije letiš, lakše slijetaš) |
 | `G` | uvlačenje / izvlačenje kotača (mlažnjak i putnički avion) |
 | `N` | ispočetka |
 | `P` | pauza |
@@ -52,12 +53,25 @@ Za mlađu djecu u izborniku postoji postavka **Palica: ⬆️ Gore = gore**, gdj
 Kotači se mogu uvući samo u zraku. S uvučenim kotačima avion je malo brži, a ako zaboraviš
 izvući kotače, avion klizne po trbuhu i vrati se na početak.
 
+### Gamepad (Xbox / PlayStation)
+
+| Gumb | Radnja |
+|---|---|
+| lijeva gljiva | palica (prema sebi = nos gore, lijevo/desno = nagib) |
+| `RT` / `LT` | više / manje gasa |
+| `LB` / `RB` | kormilo |
+| `A` / `✕` | kočnica |
+| `B` / `○` | zakrilca |
+| `X` / `◻` | kotači |
+| `Y` / `△` | kamera |
+| `Start` / `Back` | pauza / izbornik |
+
 ### Na mobitelu i tabletu
 
 - **lijevo:** povuci klizač **GAS** prema gore (ostaje gdje ga pustiš)
 - **desno:** palica upravlja avionom: prema sebi = nos gore, od sebe = nos dolje, lijevo/desno = nagib (na pisti: skretanje)
 - **STOP:** kočnica dok ga držiš
-- 🛞 kotači, 🎥 kamera, ⏸ pauza, ☰ izbornik
+- 🛬 zakrilca, 🛞 kotači, 🎥 kamera, ⏸ pauza, ☰ izbornik
 - na Androidu igra prelazi na cijeli ekran i okreće se vodoravno
 
 ## Kako je složeno
@@ -65,8 +79,8 @@ izvući kotače, avion klizne po trbuhu i vrati se na početak.
 ```
 src/
   main.ts                 – pokretanje, glavna petlja, poruke igraču
-  core/Input.ts           – tipkovnica → kontrole (-1..1)
-  physics/FlightModel.ts  – arkadna fizika leta (fiksni korak 120 Hz), tlo, more, strmine, vjetar
+  core/Input.ts           – tipkovnica i gamepad → kontrole (-1..1), glatko pomicanje palice
+  physics/FlightModel.ts  – fizika leta (fiksni korak 120 Hz): sile, uzgon, zakrilca, tlo, more, vjetar
   aircraft/catalog.ts     – 4 aviona: fizika, kamera, zvuk, model od osnovnih oblika, svjetla
   aircraft/airlines.ts    – aviokompanije i njihove boje
   aircraft/Aircraft.ts    – vidljivi avion koji prati fiziku
@@ -91,10 +105,18 @@ src/
   audio/Sound.ts          – motor, vjetar, kiša, kotači, upozorenje, efekti (Web Audio, bez datoteka)
 ```
 
-**Fizika za djecu:** avion leti kamo gleda nos. Kad pustiš tipke, sam se izravna.
-Ne može se okrenuti naglavačke (najviše 60° nagiba i 45° nosa gore/dolje).
-Gubi uzgon tek kad jako uspori. Pad samo vrati avion na pistu.
-Sletjeti se može i na travu; samo hidroavion smije na more.
+**Fizika:** u izborniku biraš koliko je let stvaran:
+
+- 🧸 **Arkadno** – avion leti točno kamo gleda nos, kao prije.
+- ✈️ **Normalno** (zadano) – prave sile: avion ima težinu i zalet, uzgon raste s brzinom i
+  kutom krila, u zaokretu treba malo povući. Pomagač izravna krila i drži visinu kad pustiš
+  palicu, ne da više od 70° nagiba i 50° nosa, i ne da avionu da izgubi uzgon (stall).
+- 🎓 **Realistično** – bez pomagača: može se napraviti looping, a ako previše povučeš
+  ili jako usporiš, krilo izgubi uzgon i nos padne.
+
+Zakrilca daju više uzgona pri maloj brzini (ali i više otpora). Blizu tla avion lakše
+lebdi (efekt tla). Vjetar puše i u zraku, pa avion pri slijetanju malo „ide ukoso".
+Pad samo vrati avion na pistu. Sletjeti se može i na travu; samo hidroavion smije na more.
 
 ## Faze
 

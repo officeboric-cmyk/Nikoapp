@@ -24,6 +24,10 @@
           <span class="value" id="hud-alt">0</span>
           <span class="caption">m visine</span>
         </div>
+        <div class="cell hidden" id="hud-flaps-gauge">
+          <span class="value" id="hud-flaps">🛬</span>
+          <span class="caption" id="hud-flaps-text">zakrilca</span>
+        </div>
         <div class="cell hidden" id="hud-gear-gauge">
           <span class="value" id="hud-gear">⬇</span>
           <span class="caption">kotači</span>
@@ -38,6 +42,7 @@
 
       <div id="top-buttons">
         <button id="pause-btn" class="round-btn touch-only" type="button" aria-label="Pauza">⏸</button>
+        <button id="flaps-btn" class="round-btn" type="button" aria-label="Zakrilca">🛬</button>
         <button id="gear-btn" class="round-btn hidden" type="button" aria-label="Kotači">🛞</button>
         <button id="cam-btn" class="round-btn" type="button" aria-label="Kamera">🎥</button>
         <button id="menu-btn" type="button" aria-label="Izbornik">☰<span class="btn-label"> Izbornik</span></button>
@@ -53,14 +58,14 @@
         <li id="help-pitch"></li>
         <li><kbd>A</kbd> / <kbd>←</kbd> lijevo &nbsp; <kbd>D</kbd> / <kbd>→</kbd> desno</li>
         <li><kbd>Q</kbd> / <kbd>E</kbd> kormilo</li>
-        <li><kbd>Razmak</kbd> kočnica &nbsp; <kbd>G</kbd> kotači</li>
+        <li><kbd>Razmak</kbd> kočnica &nbsp; <kbd>G</kbd> kotači &nbsp; <kbd>V</kbd> zakrilca</li>
         <li><kbd>N</kbd> ispočetka &nbsp; <kbd>P</kbd> pauza</li>
         <li><kbd>M</kbd> zvuk &nbsp; <kbd>C</kbd> kamera &nbsp; <kbd>H</kbd> pomoć &nbsp; <kbd>Esc</kbd> izbornik</li>
       </ul>
       <ul class="touch-only">
         <li>Lijevo: povuci <b>GAS</b> prema gore</li>
         <li id="help-stick"></li>
-        <li><b>STOP</b> koči &nbsp; 🛞 kotači &nbsp; 🎥 kamera &nbsp; ⏸ pauza</li>
+        <li><b>STOP</b> koči &nbsp; 🛬 zakrilca &nbsp; 🛞 kotači &nbsp; 🎥 kamera</li>
       </ul>
       <p class="hint">Daj gas, ubrzaj po pisti i povuci nos gore!</p>
     </div>
@@ -88,6 +93,7 @@
           <div class="pills" id="env-time"></div>
           <div class="pills" id="env-weather"></div>
           <div class="pills" id="env-controls"><span class="pills-label">Palica:</span></div>
+          <div class="pills" id="env-realism"><span class="pills-label">Fizika:</span></div>
         </div>
         <div class="tabs">
           <button class="tab" type="button" data-tab="missions">🎯 Misije</button>
