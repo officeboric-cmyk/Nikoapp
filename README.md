@@ -13,8 +13,9 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - dim guma pri slijetanju, prašina na travi, prskanje vode, bijeli tragovi iza mlažnjaka
 - glatki, detaljni avioni: aerodinamičan trup, krila s pravim profilom, kokpit s pilotom, prozori,
   motori s ventilatorom; pokretna krilca, kormila i zakrilca, kotači na oprugama, zamućeni propeler
-- drugi avioni lete između aerodroma
-- instrumenti (umjetni horizont, kompas), strelica do cilja, mini-karta, upozorenje „Pazi, brdo!"
+- drugi avioni lete između aerodroma (pazi da se ne sudariš!)
+- instrumenti (umjetni horizont, kompas), strelica do cilja, mini-karta, upozorenja „Pazi, brdo!" i „Pazi, avion ispred!"
+- sudar s drugim avionom (u zraku ili parkiranim na aerodromu) je pad, kao i udar u brdo
 - 3 kamere: iza aviona, iz kokpita (FPV) i sa strane; zvuk motora, vjetra i kiše
 - radi i na mobitelu i tabletu (kontrole na dodir); napredak se pamti u pregledniku
 
@@ -95,6 +96,7 @@ src/
   game/MissionRun.ts      – tijek misije: prstenovi, slijetanja, brodić, tura, zvjezdice
   game/landing.ts         – ocjena slijetanja (1–3 zvjezdice)
   game/hillWarning.ts     – upozorenje „Pazi, brdo!"
+  game/collisions.ts      – sudari s drugim avionima i upozorenje „Pazi, avion ispred!"
   game/Progress.ts        – spremljeni napredak (zvjezdice, otkriveni otoci)
   world/islands.ts        – popis otoka i aerodroma (lako dodati nove)
   world/Terrain.ts        – visinske mape otoka, "koliko je visoko tlo ovdje?"

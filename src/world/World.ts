@@ -27,6 +27,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { AIRCRAFT } from '../aircraft/catalog';
+import { planeRadius, type Obstacle } from '../game/collisions';
 import { RUNWAY_WIDTH, type Airport } from './Airport';
 import { MAP_HALF_SIZE, type IslandDef } from './islands';
 import { lightMaterial, lightPoints } from './lights';
@@ -54,6 +55,8 @@ export class World {
   readonly nightOnly: Object3D[] = [];
   readonly cloudMaterial = new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 1, flatShading: true });
   readonly windowsMaterial = new MeshStandardMaterial({ flatShading: true });
+  /** The planes parked on the aprons, which can be bumped into while taxiing. */
+  readonly parked: Obstacle[] = [];
   private readonly beams: Object3D[] = [];
   private readonly labels: Sprite[] = [];
 
@@ -243,6 +246,7 @@ export class World {
       plane.position.y += type.spec.gearHeight + 0.1;
       plane.rotation.y = airport.heading + Math.PI / 2;
       this.scene.add(plane);
+      this.parked.push({ position: plane.position.clone(), radius: planeRadius(type.spec.wingspan), velocity: new Vector3() });
     }
   }
 

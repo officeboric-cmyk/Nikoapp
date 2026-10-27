@@ -41,7 +41,7 @@ export interface Ground {
 export const SEA_LEVEL = 0;
 export const FLAT_GROUND: Ground = { heightAt: () => 0 };
 
-export type FlightEvent = 'takeoff' | 'touchdown' | 'belly' | 'crash' | 'splash';
+export type FlightEvent = 'takeoff' | 'touchdown' | 'belly' | 'crash' | 'splash' | 'collision';
 export type GearCommand = 'up' | 'down' | 'fixed' | 'on-ground';
 
 export const FLAP_STAGES = [0, 0.5, 1];
@@ -486,7 +486,12 @@ export class FlightModel {
     return events;
   }
 
-  private crash(events: FlightEvent[], kind: 'crash' | 'splash'): FlightEvent[] {
+  /** Flew into another plane. */
+  collide(): FlightEvent[] {
+    return this.crashed ? [] : this.crash([], 'collision');
+  }
+
+  private crash(events: FlightEvent[], kind: 'crash' | 'splash' | 'collision'): FlightEvent[] {
     this.crashed = true;
     this.speed = 0;
     this.velocity.set(0, 0, 0);

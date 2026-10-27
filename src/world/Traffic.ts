@@ -1,13 +1,14 @@
 import { Euler, MathUtils, Scene, Vector3 } from 'three';
 import { airlineById } from '../aircraft/airlines';
 import { AIRCRAFT, spinPropellers, type AircraftModel } from '../aircraft/catalog';
+import { planeRadius, type Obstacle } from '../game/collisions';
 import type { Airport } from './Airport';
 import type { Terrain } from './Terrain';
 
 /**
  * Other planes flying between the airports, so the sky isn't empty. They follow a loop
- * of airports, cruising high and dipping into a low pass over each one. They are only
- * scenery: the player can't bump into them.
+ * of airports, cruising high and dipping into a low pass over each one. The player can
+ * bump into them (see game/collisions.ts).
  */
 
 interface RouteDef {
@@ -36,9 +37,14 @@ const LOOK_AHEAD = 600; // m ahead checked for hills
 const CLIMB_RATE = 8; // m/s
 
 const tmpEuler = new Euler(0, 0, 0, 'YXZ');
+const KNOCKED_OUT = 12; // s a plane the player flew into stays away before flying on
 
 class Flight {
   readonly position = new Vector3();
+  readonly velocity = new Vector3();
+  readonly obstacle: Obstacle;
+  /** After a bump, s until it shows up again. */
+  away = 0;
   heading = 0; // radians, FlightModel convention (0 = -Z, + = towards -X)
   private bank = 0;
   private pitch = 0;
@@ -49,7 +55,9 @@ class Flight {
     readonly model: AircraftModel,
     readonly route: Airport[],
     start: number, // 0..1, how far along the first leg it begins
+    wingspan: number,
   ) {
+    this.obstacle = { position: this.position, radius: planeRadius(wingspan), velocity: this.velocity };
     const from = route[0].center;
     const to = route[1].center;
     this.position.lerpVectors(from, to, start).setY(def.cruise);
@@ -59,6 +67,8 @@ class Flight {
 
   update(dt: number, terrain: Terrain): void {
     const { def } = this;
+    this.away = Math.max(0, this.away - dt);
+    this.model.object.visible = this.away === 0;
     const target = this.route[this.leg].center;
     const dx = target.x - this.position.x;
     const dz = target.z - this.position.z;
@@ -83,8 +93,9 @@ class Flight {
     this.position.y += climb;
     this.pitch = MathUtils.damp(this.pitch, Math.atan2(climb / dt, def.speed), 2, dt);
 
-    this.position.x -= Math.sin(this.heading) * def.speed * dt;
-    this.position.z -= Math.cos(this.heading) * def.speed * dt;
+    this.velocity.set(-Math.sin(this.heading) * def.speed, climb / dt, -Math.cos(this.heading) * def.speed);
+    this.position.x += this.velocity.x * dt;
+    this.position.z += this.velocity.z * dt;
 
     const object = this.model.object;
     object.position.copy(this.position);
@@ -106,7 +117,7 @@ export class Traffic {
       if (type.spec.retractableGear) model.gear.visible = false; // always flying, so the wheels are tucked away
       const route = def.airports.map((name) => terrain.airports.find((a) => a.name === name)!);
       // Spread them out so they aren't all leaving the same airport at once.
-      const flight = new Flight(def, model, route, 0.2 + ((i * 0.37) % 0.6));
+      const flight = new Flight(def, model, route, 0.2 + ((i * 0.37) % 0.6), type.spec.wingspan);
       scene.add(model.object);
       this.flights.push(flight);
     });
@@ -118,6 +129,17 @@ export class Traffic {
   }
 
   get positions(): Vector3[] {
-    return this.flights.map((f) => f.position);
+    return this.flights.filter((f) => f.away === 0).map((f) => f.position);
+  }
+
+  /** The planes in the air that can be bumped into right now. */
+  get obstacles(): Obstacle[] {
+    return this.flights.filter((f) => f.away === 0).map((f) => f.obstacle);
+  }
+
+  /** The plane the player flew into goes away for a while (as if it went off to land). */
+  knockOut(obstacle: Obstacle): void {
+    const flight = this.flights.find((f) => f.obstacle === obstacle);
+    if (flight) flight.away = KNOCKED_OUT;
   }
 }

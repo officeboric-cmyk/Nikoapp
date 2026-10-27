@@ -6,6 +6,7 @@ import { Sound } from './audio/Sound';
 import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
 import { Graphics } from './core/Graphics';
 import { Input } from './core/Input';
+import { collision, planeAhead } from './game/collisions';
 import { hillAhead } from './game/hillWarning';
 import { scoreLanding, starText } from './game/landing';
 import { MissionRun, type MissionResult, type MissionUpdate } from './game/MissionRun';
@@ -321,6 +322,11 @@ function handleEvents(events: FlightEvent[], now: number): void {
       respawnAt = now + RESPAWN_DELAY;
       effects.crash(model);
       sound.crash();
+    } else if (event === 'collision') {
+      hud.flash(`Bum! Sudar s drugim avionom 💥 ${mission ? 'Misija kreće ispočetka…' : 'Idemo opet…'}`, now, RESPAWN_DELAY, true);
+      respawnAt = now + RESPAWN_DELAY;
+      effects.crash(model);
+      sound.crash();
     } else if (event === 'splash') {
       hud.flash(`Pljus! 🌊 Ovaj avion ne zna plivati. ${mission ? 'Misija kreće ispočetka…' : 'Idemo opet…'}`, now, RESPAWN_DELAY, true);
       respawnAt = now + RESPAWN_DELAY;
@@ -356,6 +362,7 @@ function updateHint(now: number, altitude: number): void {
   const { upKeys, downKeys, upStick, downStick } = nose();
   if (model.stalled) return hud.hint(say(`Presporo! Dodaj gas (R) i spusti nos (${downKeys})`, `Presporo! Dodaj gas i ${downStick}`), now, true);
   if (hillAhead(model, terrain)) return hud.hint(say(`⛰️ Pazi, brdo! Digni nos (${upKeys})!`, `⛰️ Pazi, brdo! ${capitalize(upStick)}!`), now, true);
+  if (!model.onGround && planeAhead(model, traffic.obstacles)) return hud.hint('✈️ Pazi, avion ispred! Skreni ili promijeni visinu', now, true);
   const landingWithoutWheels = model.spec.retractableGear && !model.gearDown && !model.onGround && altitude < GEAR_WARNING_HEIGHT && model.velocity.y < -1;
   if (landingWithoutWheels) return hud.hint(say('🛞 Izvuci kotače (G)!', '🛞 Izvuci kotače (gumb 🛞)!'), now, true);
   if (model.onGround && !hasFlown) {
@@ -395,6 +402,12 @@ function frame(time: number): void {
     while (accumulator >= PHYSICS_STEP) {
       handleEvents(model.step(PHYSICS_STEP, controls, terrain), now);
       accumulator -= PHYSICS_STEP;
+    }
+    // Flying (or taxiing) into another plane.
+    const bumped = model.crashed ? null : collision(model, [...traffic.obstacles, ...world.parked]);
+    if (bumped) {
+      traffic.knockOut(bumped);
+      handleEvents(model.collide(), now);
     }
     // After sliding to a stop on its belly, the plane goes back to the start.
     if (model.bellyLanded && model.speed < 0.5 && respawnAt === Infinity) respawnAt = now + 2;
