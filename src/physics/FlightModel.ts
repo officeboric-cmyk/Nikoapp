@@ -194,6 +194,10 @@ export class FlightModel {
       this.throttle = MathUtils.clamp(this.throttle + c.throttle * THROTTLE_RATE * dt, 0, 1);
     }
 
+    // The surfaces follow the stick, also standing still on the ground (in the air the helper may move them too).
+    this.surfaces.pitch = c.pitch;
+    this.surfaces.roll = c.roll;
+    this.surfaces.yaw = c.yaw;
     if (this.realism === 'arcade' || this.onGround) this.stepArcade(dt, c, ground);
     else this.stepForces(dt, c, ground);
     return this.contact(events, ground);
@@ -218,9 +222,6 @@ export class FlightModel {
   /** Rotates the plane by the given stick inputs (-1..1), scaled by how much the controls bite. */
   private rotate(dt: number, pitchIn: number, rollIn: number, yawIn: number, authority: number, yawRate: number): void {
     const s = this.spec;
-    this.surfaces.pitch = pitchIn;
-    this.surfaces.roll = rollIn;
-    this.surfaces.yaw = yawIn;
     tmpEuler.set(pitchIn * s.pitchRate * authority * dt, -yawIn * yawRate * dt, -rollIn * s.rollRate * authority * dt);
     this.quaternion.multiply(tmpQ.setFromEuler(tmpEuler));
   }
@@ -367,6 +368,7 @@ export class FlightModel {
     if (helped) this.limit(total, NORMAL_LIMITS);
     this.rotate(dt, total.pitch, total.roll, c.yaw, authority, s.yawRate * authority);
     this.surfaces.pitch = input.pitch;
+    this.surfaces.roll = input.roll;
     // Sideways, the nose swings into the airflow, which is what makes a banked plane turn.
     this.quaternion.multiply(tmpQ.setFromAxisAngle(UP, -sideslip * YAW_STABILITY * authority * dt));
     this.quaternion.normalize();

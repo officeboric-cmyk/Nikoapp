@@ -1,6 +1,6 @@
 import { Euler, MathUtils, Scene, Vector3 } from 'three';
 import { airlineById } from '../aircraft/airlines';
-import { AIRCRAFT, type AircraftModel } from '../aircraft/catalog';
+import { AIRCRAFT, spinPropellers, type AircraftModel } from '../aircraft/catalog';
 import type { Airport } from './Airport';
 import type { Terrain } from './Terrain';
 
@@ -89,7 +89,7 @@ class Flight {
     const object = this.model.object;
     object.position.copy(this.position);
     object.quaternion.setFromEuler(tmpEuler.set(this.pitch, this.heading, -this.bank));
-    for (const prop of this.model.propellers) prop.rotation.z += 30 * dt;
+    spinPropellers(this.model.propellers, 30, dt);
   }
 }
 
