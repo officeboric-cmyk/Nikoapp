@@ -120,7 +120,8 @@ export class Airport {
     runway.receiveShadow = true;
     group.add(runway);
 
-    const dashCount = Math.floor((this.length - 60) / 40);
+    // Centre-line dashes, stopping short of the runway numbers at each end.
+    const dashCount = Math.floor((this.length - 160) / 40) + 1;
     const marks = new InstancedMesh(
       new BoxGeometry(1, 0.02, 1),
       new MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
@@ -129,7 +130,7 @@ export class Airport {
     const m = new Matrix4();
     const scale = (sx: number, sz: number) => new Matrix4().makeScale(sx, 1, sz);
     for (let i = 0; i < dashCount; i++) {
-      marks.setMatrixAt(i, m.makeTranslation(0, 0.13, half - 50 - i * 40).multiply(scale(1, 20)));
+      marks.setMatrixAt(i, m.makeTranslation(0, 0.13, half - 80 - i * 40).multiply(scale(1, 20)));
     }
     // Threshold "piano keys" at both ends.
     for (let i = 0; i < 8; i++) {

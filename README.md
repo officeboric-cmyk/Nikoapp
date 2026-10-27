@@ -11,7 +11,8 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - **dan, zalazak i noć** (sunce, mjesec, svjetla piste, svjetionik, zvijezde) i **vrijeme**: vedro, vjetar, kiša
 - more s valićima, odrazom neba, plićacima i pjenom; palme na plažama
 - dim guma pri slijetanju, prašina na travi, prskanje vode, bijeli tragovi iza mlažnjaka
-- pokretna krilca, kormila i zakrilca, kotači na oprugama, zamućeni propeler
+- glatki, detaljni avioni: aerodinamičan trup, krila s pravim profilom, kokpit s pilotom, prozori,
+  motori s ventilatorom; pokretna krilca, kormila i zakrilca, kotači na oprugama, zamućeni propeler
 - drugi avioni lete između aerodroma
 - instrumenti (umjetni horizont, kompas), strelica do cilja, mini-karta, upozorenje „Pazi, brdo!"
 - 3 kamere: iza aviona, iz kokpita (FPV) i sa strane; zvuk motora, vjetra i kiše
@@ -85,7 +86,9 @@ src/
   core/Input.ts           – tipkovnica i gamepad → kontrole (-1..1), glatko pomicanje palice
   core/Graphics.ts        – iscrtavanje i kvaliteta slike (Brzo / Lijepo: razlučivost, sjene, sjaj)
   physics/FlightModel.ts  – fizika leta (fiksni korak 120 Hz): sile, uzgon, zakrilca, tlo, more, vjetar
-  aircraft/catalog.ts     – 4 aviona: fizika, kamera, zvuk, model od osnovnih oblika, svjetla
+  aircraft/catalog.ts     – 4 aviona: fizika, kamera, zvuk
+  aircraft/models.ts      – 3D modeli aviona (trup, krila, rep, kotači, propeler, pilot, svjetla)
+  aircraft/shapes.ts      – glatki oblici iz presjeka: trup od elipsa, krila od aeroprofila
   aircraft/airlines.ts    – aviokompanije i njihove boje
   aircraft/Aircraft.ts    – vidljivi avion koji prati fiziku
   game/missions.ts        – popis misija (lako dodati nove)

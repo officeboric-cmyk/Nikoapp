@@ -61,7 +61,7 @@ export class Aircraft {
     for (const elevator of s.elevators) elevator.rotation.x = -clamp(shown.pitch) * ELEVATOR;
     for (const aileron of s.ailerons.right) aileron.rotation.x = -clamp(shown.roll) * AILERON;
     for (const aileron of s.ailerons.left) aileron.rotation.x = clamp(shown.roll) * AILERON;
-    for (const rudder of s.rudders) rudder.rotation.y = clamp(shown.yaw) * RUDDER;
+    for (const rudder of s.rudders) rudder.rotation.x = clamp(shown.yaw) * RUDDER; // a rudder's hinge runs up its X axis
     for (const flap of s.flaps) flap.rotation.x = shown.flaps * FLAPS;
   }
 

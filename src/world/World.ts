@@ -238,7 +238,7 @@ export class World {
     ];
     for (const spot of spots) {
       const type = AIRCRAFT.find((t) => t.id === spot.id)!;
-      const plane = type.build().object;
+      const plane = type.build(undefined, true).object;
       plane.position.copy(airport.pointAt(spot.along, spot.across));
       plane.position.y += type.spec.gearHeight + 0.1;
       plane.rotation.y = airport.heading + Math.PI / 2;
