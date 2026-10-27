@@ -67,6 +67,7 @@ const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, progress, {
   onControls: setControls,
   onRealism: (realism) => (model.realism = realism),
   onQuality: setQuality,
+  onSteering: (tilt) => void setSteering(tilt, true),
 });
 const missionDone = document.getElementById('mission-done')!;
 const gearButton = document.getElementById('gear-btn')!;
@@ -93,6 +94,8 @@ function startMission(def: MissionDef): void {
 /** Runs inside the click / key press that started the flight, so the browser lets the sound start. */
 function begin(picked: Choice): void {
   sound.start();
+  // Inside the tap that starts the flight, so iPhones and iPads may ask to use the tilt sensor.
+  if (touch.enabled && menu.tilt) void setSteering(true, false);
   setup(picked);
   started = true;
   setPaused(false);
@@ -147,16 +150,34 @@ function setControls(real: boolean): void {
   input.realControls = touch.realControls = real;
   const [upKeys, downKeys] = real ? ['<kbd>S</kbd> / <kbd>↓</kbd>', '<kbd>W</kbd> / <kbd>↑</kbd>'] : ['<kbd>W</kbd> / <kbd>↑</kbd>', '<kbd>S</kbd> / <kbd>↓</kbd>'];
   document.getElementById('help-pitch')!.innerHTML = `${upKeys} nos gore &nbsp; ${downKeys} nos dolje`;
-  document.getElementById('help-stick')!.textContent = real
-    ? 'Desno: palica prema sebi = nos gore, od sebe = nos dolje'
-    : 'Desno: palica gore = nos gore, dolje = nos dolje';
+  updateStickHelp();
+}
+
+function updateStickHelp(): void {
+  const real = input.realControls;
+  document.getElementById('help-stick')!.textContent = touch.tilt.active
+    ? `Naginji uređaj kao volan; vrh ${real ? 'prema sebi' : 'od sebe'} = nos gore. ⟳ = ravno`
+    : real
+      ? 'Desno: palica prema sebi = nos gore, od sebe = nos dolje'
+      : 'Desno: palica gore = nos gore, dolje = nos dolje';
 }
 
 /** How to lift or lower the nose with the current controls, for tips on screen. */
 function nose(): { upKeys: string; downKeys: string; upStick: string; downStick: string } {
+  const tilt = touch.tilt.active;
   return input.realControls
-    ? { upKeys: 'S ili ↓', downKeys: 'W ili ↑', upStick: 'povuci palicu prema sebi', downStick: 'gurni palicu od sebe' }
-    : { upKeys: 'W ili ↑', downKeys: 'S ili ↓', upStick: 'gurni palicu gore', downStick: 'povuci palicu dolje' };
+    ? {
+        upKeys: 'S ili ↓',
+        downKeys: 'W ili ↑',
+        upStick: tilt ? 'nagni vrh uređaja prema sebi' : 'povuci palicu prema sebi',
+        downStick: tilt ? 'nagni vrh uređaja od sebe' : 'gurni palicu od sebe',
+      }
+    : {
+        upKeys: 'W ili ↑',
+        downKeys: 'S ili ↓',
+        upStick: tilt ? 'nagni vrh uređaja od sebe' : 'gurni palicu gore',
+        downStick: tilt ? 'nagni vrh uređaja prema sebi' : 'povuci palicu dolje',
+      };
 }
 
 function capitalize(text: string): string {
@@ -210,6 +231,26 @@ function respawn(): void {
   touch.reset();
   respawnAt = Infinity;
   accumulator = 0;
+}
+
+/**
+ * Tilt steering on or off. If the device can't tell its tilt (or the player says no), it
+ * falls back to the stick; `explain` says so on screen.
+ */
+async function setSteering(tilt: boolean, explain: boolean): Promise<void> {
+  const ok = await touch.useTilt(tilt);
+  updateStickHelp();
+  if (tilt && ok) {
+    // A device without the sensor accepts but never reports a tilt.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (touch.tilt.working) return;
+    await touch.useTilt(false);
+    updateStickHelp();
+  }
+  if (tilt) {
+    menu.setTilt(false);
+    if (explain) hud.flash('📱 Ovaj uređaj ne može upravljati naginjanjem — koristi palicu', timer.getElapsed(), 4, true);
+  }
 }
 
 function setQuality(quality: Quality): void {

@@ -618,6 +618,38 @@ button {
   border: 3px solid rgba(255, 255, 255, 0.9);
 }
 
+/* Steering by tilting: the joystick gives way to a button that sets "straight". */
+body.tilt #touch-stick {
+  display: none;
+}
+
+#tilt-center {
+  display: none;
+  position: fixed;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: 24px;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: rgba(255, 255, 255, 0.4);
+  color: #fff;
+  font: inherit;
+  font-size: 34px;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+#tilt-center span {
+  display: block;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+body.tilt #tilt-center {
+  display: block;
+}
+
 #touch-knob {
   position: absolute;
   left: 50%;

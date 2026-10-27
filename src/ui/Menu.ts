@@ -27,6 +27,8 @@ export interface MenuHandlers {
   onControls(realControls: boolean): void;
   onRealism(realism: Realism): void;
   onQuality(quality: Quality): void;
+  /** Phones and tablets: steer by tilting (true) or with the on-screen stick. */
+  onSteering(tilt: boolean): void;
 }
 
 /** Fast: sharp enough and smooth on any phone. Pretty: glow around lights and the sun, crisper shadows. */
@@ -41,6 +43,11 @@ const REALISM: { id: Realism; label: string }[] = [
   { id: 'arcade', label: '🧸 Arkadno' },
   { id: 'normal', label: '✈️ Normalno' },
   { id: 'realistic', label: '🎓 Realistično' },
+];
+
+const STEERING = [
+  { id: 'stick', label: '👆 Palica' },
+  { id: 'tilt', label: '📱 Naginjanje' },
 ];
 
 const CONTROL_STYLES = [
@@ -66,6 +73,8 @@ export class Menu {
   /** How true to life the flying is (see FlightModel). */
   realism: Realism;
   quality: Quality;
+  /** Phones and tablets: steer by tilting the device. */
+  tilt: boolean;
 
   constructor(
     aircraftTypes: AircraftType[],
@@ -82,6 +91,7 @@ export class Menu {
     this.realism = REALISM.find((r) => r.id === saved?.realism)?.id ?? 'normal';
     // Phones and tablets start on the fast setting; computers can afford the pretty one.
     const coarse = window.matchMedia('(pointer: coarse)').matches;
+    this.tilt = saved?.steering === 'tilt';
     this.quality = QUALITIES.find((q) => q.id === saved?.quality)?.id ?? (coarse ? 'fast' : 'pretty');
 
     // Time of day and weather apply straight away, so the scene behind the menu shows them.
@@ -116,6 +126,12 @@ export class Menu {
         this.save();
         this.render();
         this.handlers.onQuality(id);
+      });
+    }
+    for (const { id, label } of STEERING) {
+      pill(document.getElementById('env-steering')!, id, label, () => {
+        this.setTilt(id === 'tilt');
+        this.handlers.onSteering(this.tilt);
       });
     }
     for (const { id, label } of CONTROL_STYLES) {
@@ -215,6 +231,13 @@ export class Menu {
     this.handlers.onStart(this.choice);
   }
 
+  /** Switches tilt steering on or off in the menu (e.g. back off when the device can't do it). */
+  setTilt(tilt: boolean): void {
+    this.tilt = tilt;
+    this.save();
+    this.render();
+  }
+
   private save(): void {
     try {
       const saved = {
@@ -227,6 +250,7 @@ export class Menu {
         controls: this.realControls ? 'real' : 'simple',
         realism: this.realism,
         quality: this.quality,
+        steering: this.tilt ? 'tilt' : 'stick',
       };
       localStorage.setItem(CHOICE_KEY, JSON.stringify(saved));
     } catch {
@@ -243,6 +267,9 @@ export class Menu {
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-realism .pill')) {
       button.classList.toggle('selected', button.dataset.id === this.realism);
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-steering .pill')) {
+      button.classList.toggle('selected', (button.dataset.id === 'tilt') === this.tilt);
     }
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#env-quality .pill')) {
       button.classList.toggle('selected', button.dataset.id === this.quality);
@@ -289,6 +316,7 @@ interface SavedChoice {
   controls?: string;
   realism?: string;
   quality?: string;
+  steering?: string;
 }
 
 function loadChoice(): SavedChoice | null {

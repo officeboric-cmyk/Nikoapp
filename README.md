@@ -77,6 +77,9 @@ izvući kotače, avion klizne po trbuhu i vrati se na početak.
 - **desno:** palica upravlja avionom: prema sebi = nos gore, od sebe = nos dolje, lijevo/desno = nagib (na pisti: skretanje)
 - **STOP:** kočnica dok ga držiš
 - 🛬 zakrilca, 🛞 kotači, 🎥 kamera, ⏸ pauza, ☰ izbornik
+- **📱 naginjanje** (izbornik → Upravljanje): umjesto palice naginješ uređaj kao volan –
+  okreneš ga lijevo/desno za nagib, vrh prema sebi = nos gore. „Ravno" je kako držiš uređaj
+  kad let počne; gumb **⟳ Ravno** to postavi ponovno. Na iPhoneu/iPadu preglednik prvo pita dopuštenje.
 - na Androidu igra prelazi na cijeli ekran i okreće se vodoravno
 
 ## Kako je složeno
@@ -115,6 +118,7 @@ src/
   ui/Menu.ts              – misije, slobodno letenje, doba dana, vrijeme
   ui/Minimap.ts           – mini-karta otoka, drugih aviona i cilja
   ui/TouchControls.ts     – klizač za gas, palica i kočnica za ekrane na dodir
+  ui/TiltControls.ts      – upravljanje naginjanjem mobitela ili tableta
   audio/Sound.ts          – motor, vjetar, kiša, kotači, upozorenje, efekti (Web Audio, bez datoteka)
 ```
 
