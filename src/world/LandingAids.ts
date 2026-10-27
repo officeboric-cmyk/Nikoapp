@@ -27,7 +27,9 @@ const WHITE = new Color(0xffffff);
 const RED = new Color(0xff2b2b);
 
 /** One runway end seen from an approaching plane. */
-interface Approach {
+export interface Approach {
+  airport: Airport;
+  reverse: boolean; // landing the opposite way to take-off (the runway's other number)
   threshold: Vector3; // runway end the plane crosses first, at ground level
   direction: Vector3; // the way the plane lands (flat, unit)
   papi: { position: Vector3; material: MeshBasicMaterial; glow: PointsMaterial }[];
@@ -62,7 +64,7 @@ export class LandingAids {
           scene.add(light, lightPoints([position.clone().setY(position.y + 1)], glow));
           return { position, material, glow };
         });
-        this.approaches.push({ threshold, direction, papi });
+        this.approaches.push({ airport, reverse: sign < 0, threshold, direction, papi });
       }
     }
 
@@ -95,8 +97,9 @@ export class LandingAids {
     this.rings.visible = rings && !model.onGround && this.placeRings(model);
   }
 
-  /** Puts the rings on the 3° path to the runway the plane is lined up with; false if there is none. */
-  private placeRings(model: FlightModel): boolean {
+  /** The runway end the plane is lined up to land on (within a few km), if any. */
+  approachAhead(model: FlightModel): { approach: Approach; ahead: number } | null {
+    if (model.onGround) return null;
     flatNose.set(0, 0, -1).applyQuaternion(model.quaternion).setY(0).normalize();
     for (const approach of this.approaches) {
       toThreshold.copy(approach.threshold).sub(model.position).setY(0);
@@ -104,6 +107,16 @@ export class LandingAids {
       const aside = Math.abs(toThreshold.x * approach.direction.z - toThreshold.z * approach.direction.x);
       if (ahead < 200 || ahead > GUIDE_RANGE || aside > ahead * 0.35 + 100) continue;
       if (flatNose.dot(approach.direction) < GUIDE_LINED_UP) continue;
+      return { approach, ahead };
+    }
+    return null;
+  }
+
+  /** Puts the rings on the 3° path to the runway the plane is lined up with; false if there is none. */
+  private placeRings(model: FlightModel): boolean {
+    const found = this.approachAhead(model);
+    if (found) {
+      const { approach, ahead } = found;
       const aim = approach.threshold.clone().addScaledVector(approach.direction, AIM_POINT);
       this.rings.children.forEach((ring, i) => {
         const back = (i + 1) * RING_SPACING;

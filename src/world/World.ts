@@ -207,17 +207,15 @@ export class World {
 
   /** The runway's number (its compass heading in tens of degrees) painted at each end. */
   private addRunwayNumbers(airport: Airport): void {
-    const compass = MathUtils.euclideanModulo(MathUtils.radToDeg(-airport.heading), 360);
-    const number = Math.round(compass / 10) || 36;
     const ends = [
-      { text: number, along: -(airport.length / 2 - 45), turn: 0 },
-      { text: ((number + 17) % 36) + 1, along: airport.length / 2 - 45, turn: Math.PI },
+      { text: airport.runwayNumber(), along: -(airport.length / 2 - 45), turn: 0 },
+      { text: airport.runwayNumber(true), along: airport.length / 2 - 45, turn: Math.PI },
     ];
     for (const end of ends) {
       const paint = new Mesh(
         new PlaneGeometry(10, 15).rotateX(-Math.PI / 2),
         new MeshStandardMaterial({
-          map: numberTexture(String(end.text).padStart(2, '0')),
+          map: numberTexture(end.text),
           transparent: true,
           roughness: 0.8,
           polygonOffset: true,

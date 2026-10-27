@@ -92,6 +92,16 @@ export class Airport {
     );
   }
 
+  /**
+   * The runway's number as painted on it: its compass heading in tens of degrees ("09").
+   * `reverse` for the other end (landing or taking off the opposite way, "27").
+   */
+  runwayNumber(reverse = false): string {
+    const compass = MathUtils.euclideanModulo(MathUtils.radToDeg(-this.heading), 360);
+    const number = Math.round(compass / 10) || 36;
+    return String(reverse ? ((number + 17) % 36) + 1 : number).padStart(2, '0');
+  }
+
   /** Turns the windsock's tail to point where the wind blows to. */
   pointWindsock(windX: number, windZ: number): void {
     // The sock's tail points along its local +X; the whole airport is turned by `heading`.

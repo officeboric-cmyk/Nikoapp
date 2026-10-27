@@ -2,6 +2,7 @@ import { Color, PerspectiveCamera, Scene, Timer } from 'three';
 import { Aircraft } from './aircraft/Aircraft';
 import { airlineById } from './aircraft/airlines';
 import { AIRCRAFT } from './aircraft/catalog';
+import { Radio, windWords } from './audio/Radio';
 import { Sound } from './audio/Sound';
 import { CAMERA_NAMES, CameraRig } from './camera/CameraRig';
 import { Graphics } from './core/Graphics';
@@ -47,6 +48,10 @@ const SMOKE_LIGHT: Record<TimeOfDay, number> = { day: 0xffffff, sunset: 0xffcfa8
 const input = new Input();
 const hud = new HUD();
 const sound = new Sound();
+const radio = new Radio();
+radio.muted = sound.isMuted;
+/** Calls from the tower waiting to be made a little later (so they don't cover the start message). */
+const pendingCalls: { at: number; kind: string; text: string }[] = [];
 const minimap = new Minimap(terrain);
 const instruments = new Instruments();
 const progress = new Progress();
@@ -119,10 +124,16 @@ function againText(): string {
 /** Runs inside the click / key press that started the flight, so the browser lets the sound start. */
 function begin(picked: Choice): void {
   sound.start();
+  radio.reset();
+  pendingCalls.length = 0;
   // Inside the tap that starts the flight, so iPhones and iPads may ask to use the tilt sensor.
   if (touch.enabled && menu.tilt) void setSteering(true, false);
   setup(picked);
   started = true;
+  if (model.onGround) {
+    const a = picked.airport;
+    pendingCalls.push({ at: timer.getElapsed() + 3.5, kind: 'takeoff', text: `Toranj ${a.name}, pista ${a.runwayNumber()}, ${windWords(environment.wind.x, environment.wind.z)}. Slobodno za polijetanje!` });
+  }
   setPaused(false);
   if (touch.enabled) goFullscreen();
 }
@@ -294,6 +305,7 @@ function setQuality(quality: Quality): void {
 
 function setPaused(value: boolean): void {
   paused = value;
+  if (paused) radio.silence();
   sound.setPaused(paused);
 }
 
@@ -394,6 +406,8 @@ function handleEvents(events: FlightEvent[], now: number): void {
     } else if (event === 'touchdown') {
       effects.touchdown(model);
       const landing = scoreLanding(model, terrain);
+      // Spoken only: the landing's stars are already on screen.
+      if (landing.airport && landing.stars > 0) radio.call('landed', `Toranj ${landing.airport.name}: lijepo slijetanje, dobrodošli!`, now);
       const record = landing.airport && progress.recordLanding(landing.airport.name, landing.stars);
       hud.flash(record ? `${landing.text} Novi rekord!` : landing.text, now, 3.5);
       if (record) sound.reward();
@@ -439,6 +453,27 @@ function currentTarget(): Target | null {
   return { name: `✈ ${airport.name}`, x: airport.center.x, z: airport.center.z };
 }
 
+/** The tower clears the plane to take off and to land, as at a real airport. */
+function talkToTower(now: number, altitude: number): void {
+  const due = pendingCalls.findIndex((c) => now >= c.at);
+  if (due >= 0) {
+    const [c] = pendingCalls.splice(due, 1);
+    const text = radio.call(c.kind, c.text, now);
+    if (text) hud.flash(`📻 ${text}`, now, 4);
+  }
+  const lined = landingAids.approachAhead(model);
+  if (lined && altitude < 700 && model.velocity.y < 1) {
+    const { airport, reverse } = lined.approach;
+    const text = radio.call(
+      `approach ${airport.name} ${reverse}`,
+      `Toranj ${airport.name}, pista ${airport.runwayNumber(reverse)}, ${windWords(environment.wind.x, environment.wind.z)}. Slobodno za slijetanje!`,
+      now,
+      180,
+    );
+    if (text) hud.flash(`📻 ${text}`, now, 4);
+  }
+}
+
 /** Gentle tips for whatever the player is doing right now. */
 function updateHint(now: number, altitude: number): void {
   if (!started || menu.visible) return hud.hint(null, now);
@@ -447,9 +482,15 @@ function updateHint(now: number, altitude: number): void {
   const { upKeys, downKeys, upStick, downStick } = nose();
   if (model.stalled) return hud.hint(say(`Presporo! Dodaj gas (R) i spusti nos (${downKeys})`, `Presporo! Dodaj gas i ${downStick}`), now, true);
   if (hillAhead(model, terrain)) return hud.hint(say(`⛰️ Pazi, brdo! Digni nos (${upKeys})!`, `⛰️ Pazi, brdo! ${capitalize(upStick)}!`), now, true);
-  if (!model.onGround && planeAhead(model, traffic.obstacles)) return hud.hint('✈️ Pazi, avion ispred! Skreni ili promijeni visinu', now, true);
+  if (!model.onGround && planeAhead(model, traffic.obstacles)) {
+    radio.call('traffic', 'Pažnja, promet ispred vas!', now);
+    return hud.hint('✈️ Pazi, avion ispred! Skreni ili promijeni visinu', now, true);
+  }
   const landingWithoutWheels = model.spec.retractableGear && !model.gearDown && !model.onGround && altitude < GEAR_WARNING_HEIGHT && model.velocity.y < -1;
-  if (landingWithoutWheels) return hud.hint(say('🛞 Izvuci kotače (G)!', '🛞 Izvuci kotače (gumb 🛞)!'), now, true);
+  if (landingWithoutWheels) {
+    radio.call('gear', 'Provjerite kotače!', now);
+    return hud.hint(say('🛞 Izvuci kotače (G)!', '🛞 Izvuci kotače (gumb 🛞)!'), now, true);
+  }
   if (mission instanceof LessonRun) {
     const words: Words = { touch: touch.enabled, noseUp: say(upKeys, upStick), noseDown: say(downKeys, downStick) };
     return hud.hint(mission.tip(words), now);
@@ -483,7 +524,11 @@ function frame(time: number): void {
     if (input.wasTapped('KeyB') && !paused) dropLoad(now);
     if (input.wasTapped('KeyP')) setPaused(!paused);
     if (input.wasTapped('KeyN')) respawn();
-    if (input.wasTapped('KeyM')) hud.flash(sound.toggleMute() ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);
+    if (input.wasTapped('KeyM')) {
+      radio.muted = sound.toggleMute();
+      if (radio.muted) radio.silence();
+      hud.flash(radio.muted ? 'Zvuk isključen 🔇' : 'Zvuk uključen 🔊', now, 1.5);
+    }
   }
 
   if (playing && !paused) {
@@ -521,6 +566,7 @@ function frame(time: number): void {
   effects.update(paused ? 0 : dt, model, terrain);
   // Guide rings for beginners; the PAPI lights help in every mode.
   landingAids.update(model, started && model.realism !== 'realistic');
+  if (started && !paused && !menu.visible) talkToTower(now, altitude);
   updateHint(now, altitude);
   hud.update(model, now, altitude);
   const target = started ? currentTarget() : null;

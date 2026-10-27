@@ -22,6 +22,9 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
 - instrumenti (umjetni horizont, kompas), strelica do cilja, mini-karta, upozorenja „Pazi, brdo!" i „Pazi, avion ispred!"
 - sudar s drugim avionom (u zraku ili parkiranim na aerodromu) je pad, kao i udar u brdo
 - 3 kamere: iza aviona, iz kokpita (FPV) i sa strane; zvuk motora, vjetra i kiše
+- 📻 **kontrola leta**: toranj javlja „slobodno za polijetanje/slijetanje" s brojem piste i vjetrom, pozdravi
+  nakon slijetanja i upozori na promet i kotače; govori hrvatskim glasom preglednika ako ga uređaj ima
+  (inače samo tekst), utiša se s `M`
 - radi i na mobitelu i tabletu (kontrole na dodir); napredak se pamti u pregledniku
 
 ## Igraj online
@@ -129,6 +132,7 @@ src/
   ui/TouchControls.ts     – klizač za gas, palica i kočnica za ekrane na dodir
   ui/TiltControls.ts      – upravljanje naginjanjem mobitela ili tableta
   audio/Sound.ts          – motor, vjetar, kiša, kotači, upozorenje, efekti (Web Audio, bez datoteka)
+  audio/Radio.ts          – pozivi tornja (govor preglednika na hrvatskom)
 ```
 
 **Fizika:** u izborniku biraš koliko je let stvaran:
