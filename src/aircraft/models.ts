@@ -456,91 +456,119 @@ export function buildFighter(_airline?: Airline, distant = false): AircraftModel
 }
 
 /**
- * A light fighter: a long pointed nose, a bubble canopy far forward, the air intake under the
- * belly, a cropped delta wing blending into the body, one tall fin and an afterburner nozzle;
- * in two shades of grey camouflage. The gun fires from beside the cockpit.
+ * A light fighter: a long pointed nose, a big bubble canopy, the air intake under the chin, a wide
+ * flat body blending into a cropped delta wing with strakes running forward to the cockpit, one tall
+ * fin with a number, two small fins under the tail and an afterburner nozzle; two shades of grey.
+ * The gun fires from beside the cockpit.
  */
 function fighter(): AircraftModel {
   const p = new Parts();
-  const light = paint(0x8a939b, 0.55, 0.15);
-  const dark = paint(0x5f6870, 0.55, 0.15);
+  const light = paint(0xa3adb8, 0.5, 0.2);
+  const dark = paint(0x7b8692, 0.5, 0.2);
   const grey = darkGrey();
-  const nozzle = paint(0x4b4f55, 0.4, 0.7);
+  const nozzleMetal = paint(0x55595f, 0.35, 0.8);
 
+  // The body: round at the nose, then wide and flat where it blends into the wing.
   const fuselage: Section[] = [
-    { z: -8.4, w: 0.02, h: 0.02, y: -0.02 },
-    { z: -7.8, w: 0.24, h: 0.24, y: -0.02 },
-    { z: -6.8, w: 0.46, h: 0.48, y: 0 },
-    { z: -5.4, w: 0.6, h: 0.66, y: 0.06 },
-    { z: -3.8, w: 0.72, h: 0.76, y: 0.1 },
-    { z: -2.0, w: 0.92, h: 0.76, y: 0.06 },
-    { z: 0.2, w: 1.0, h: 0.74, y: 0.04 },
-    { z: 2.6, w: 0.92, h: 0.7, y: 0.04 },
-    { z: 4.6, w: 0.7, h: 0.62, y: 0.02 },
-    { z: 5.7, w: 0.56, h: 0.55, y: 0 },
+    { z: -8.6, w: 0.02, h: 0.02, y: -0.05 },
+    { z: -8.0, w: 0.2, h: 0.2, y: -0.05 },
+    { z: -7.0, w: 0.42, h: 0.42, y: -0.02 },
+    { z: -5.8, w: 0.58, h: 0.6, y: 0.04 },
+    { z: -4.4, w: 0.72, h: 0.72, y: 0.08 },
+    { z: -2.8, w: 1.0, h: 0.72, y: 0.06 },
+    { z: -0.8, w: 1.3, h: 0.66, y: 0.04 },
+    { z: 1.6, w: 1.32, h: 0.62, y: 0.04 },
+    { z: 3.8, w: 1.0, h: 0.6, y: 0.06 },
+    { z: 5.3, w: 0.66, h: 0.58, y: 0.06 },
+    { z: 6.0, w: 0.56, h: 0.54, y: 0.04 },
   ];
-  p.body(fuselage, light);
-  // Camouflage: a darker band over the back, from behind the canopy to the tail.
-  p.body(fuselage, dark, { from: 0.5, to: Math.PI - 0.5, grow: 1.02, between: [-3.8, 5.7] });
-  p.add(body(fuselage, { segments: 20, steps: 2, between: [-8.4, -7.0] }), paint(0x3f454b, 0.4, 0.2)); // dark radome tip
+  p.body(fuselage, light, { segments: 32, steps: 4 });
+  // A darker spine along the back.
+  p.body(fuselage, dark, { from: 0.9, to: Math.PI - 0.9, grow: 1.015, between: [-4.4, 6.0] });
+  p.add(body(fuselage, { segments: 24, steps: 2, between: [-8.6, -7.4], grow: 1.02 }), paint(0x5b636c, 0.4, 0.2)); // radome tip
+  p.rod(new Vector3(0, -0.05, -8.55), new Vector3(0, -0.05, -9.2), 0.025, metal()); // pitot tube
+
+  // Nozzle: a slightly flared ring of metal "feathers", dark inside.
   p.body(
     [
-      { z: 5.65, w: 0.54, h: 0.53 },
-      { z: 6.3, w: 0.5, h: 0.5 },
-      { z: 6.7, w: 0.47, h: 0.47 },
+      { z: 5.95, w: 0.56, h: 0.54, y: 0.04 },
+      { z: 6.5, w: 0.52, h: 0.5, y: 0.04 },
+      { z: 7.1, w: 0.56, h: 0.54, y: 0.04 },
     ],
-    nozzle,
+    nozzleMetal,
     { steps: 1 },
   );
-  const glow = p.add(new CircleGeometry(0.4, 16), new MeshBasicMaterial({ color: 0xffa94d }), 0, 0, 6.72);
-  glow.castShadow = false;
-  p.rod(new Vector3(0, -0.02, -8.35), new Vector3(0, -0.02, -9.0), 0.02, metal()); // pitot tube
+  p.add(new CircleGeometry(0.5, 20), paint(0x1a1b1d, 0.9), 0, 0.04, 7.06);
 
-  // Bubble canopy far forward, and the pilot.
-  const canopy = p.add(new SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), canopyGlass(), 0, 0.66, -4.4);
-  canopy.scale.set(0.5, 0.56, 1.75);
-  p.add(new TorusGeometry(0.5, 0.03, 6, 20, Math.PI), grey, 0, 0.66, -3.5);
-  pilot(p, 0, 0.82, -4.3, 0x4f5d2f);
+  // Big bubble canopy with its frame, and the pilot.
+  const canopy = p.add(new SphereGeometry(1, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2), canopyGlass(), 0, 0.7, -4.9);
+  canopy.scale.set(0.52, 0.56, 1.8);
+  p.add(new TorusGeometry(0.56, 0.035, 6, 24, Math.PI), grey, 0, 0.7, -4.0);
+  p.add(body([{ z: -3.4, w: 0.5, h: 0.4, y: 0.62 }, { z: -2.0, w: 0.36, h: 0.3, y: 0.66 }, { z: 0.5, w: 0.05, h: 0.05, y: 0.62 }], { segments: 16, steps: 3 }), light); // fairing behind the canopy
+  pilot(p, 0, 0.88, -4.8, 0x3f4a2a);
 
-  // The air intake under the belly.
+  // The intake under the chin: a wide mouth with a lip, blending back into the belly.
   const intake = body(
     [
-      { z: -3.7, w: 0.56, h: 0.4 },
-      { z: -2.8, w: 0.6, h: 0.44 },
-      { z: -0.5, w: 0.56, h: 0.4 },
-      { z: 1.2, w: 0.3, h: 0.22 },
-      { z: 2.2, w: 0.05, h: 0.05 },
+      { z: -3.9, w: 0.62, h: 0.4 },
+      { z: -3.0, w: 0.68, h: 0.44 },
+      { z: -1.0, w: 0.7, h: 0.36 },
+      { z: 0.8, w: 0.5, h: 0.16 },
+      { z: 1.8, w: 0.1, h: 0.04 },
     ],
-    { segments: 18, steps: 3 },
-  ).translate(0, -0.72, 0);
+    { segments: 20, steps: 3 },
+  ).translate(0, -0.56, 0);
   p.add(intake, light);
-  p.add(new CircleGeometry(1, 18).scale(0.5, 0.35, 1).rotateY(Math.PI), paint(0x111316, 0.8), 0, -0.72, -3.72);
+  p.add(new TorusGeometry(1, 0.06, 6, 24).scale(0.6, 0.38, 1).rotateY(Math.PI), dark, 0, -0.56, -3.92); // the lip
+  p.add(new CircleGeometry(1, 20).scale(0.58, 0.36, 1).rotateY(Math.PI), paint(0x0e0f11, 0.9), 0, -0.56, -3.86);
 
-  // The gun's muzzle beside the cockpit, on the left.
-  p.add(new CylinderGeometry(0.07, 0.07, 0.5, 8).rotateX(Math.PI / 2), paint(0x1b1d20, 0.5, 0.6), -0.62, 0.32, -3.9);
+  // The gun's muzzle in the left strake, just behind the cockpit.
+  p.add(new CylinderGeometry(0.06, 0.06, 0.4, 8).rotateX(Math.PI / 2), paint(0x1b1d20, 0.5, 0.6), -0.62, 0.32, -3.9);
 
-  // Wing: strakes blending forward into the body, a cropped delta with flaperons, missile rails at the tips.
-  p.wings({ span: 0.55, rootChord: 3.4, tipChord: 0.15, sweep: 3.0, dihedral: 0, thickness: 0.03, root: new Vector3(0.75, 0.0, -4.1) }, [{ s0: 0, s1: 0.55, material: light }]);
-  const wingForm = { span: 4.4, rootChord: 4.6, tipChord: 1.3, sweep: 3.3, dihedral: -0.02, thickness: 0.04, root: new Vector3(0.85, -0.05, -1.2) };
+  // Wing: strakes running forward to the cockpit, a big cropped delta with flaperons, rails at the tips.
+  p.wings({ span: 0.75, rootChord: 4.4, tipChord: 0.2, sweep: 4.0, dihedral: 0, thickness: 0.035, root: new Vector3(0.85, 0.04, -4.2) }, [{ s0: 0, s1: 0.75, material: light }]);
+  const wingForm = { span: 4.4, rootChord: 5.4, tipChord: 1.4, sweep: 3.7, dihedral: -0.02, thickness: 0.04, root: new Vector3(1.1, 0.0, -1.6) };
   const share = 0.82;
   p.wings(wingForm, [{ s0: 0, s1: 4.4, material: light, tip: true }], share);
-  const [aileronR, aileronL] = p.hinged(wingForm, 2.3, 4.2, share, 0.05, light);
+  const [aileronR, aileronL] = p.hinged(wingForm, 2.4, 4.2, share, 0.05, light);
   p.surfaces.ailerons.right.push(aileronR);
   p.surfaces.ailerons.left.push(aileronL);
-  p.surfaces.flaps.push(...p.hinged(wingForm, 0.3, 2.2, share, 0.05, light));
-  for (const side of [-1, 1]) p.rod(new Vector3(side * 5.28, -0.1, 1.9), new Vector3(side * 5.28, -0.1, 3.4), 0.06, grey);
+  p.surfaces.flaps.push(...p.hinged(wingForm, 0.3, 2.3, share, 0.05, light));
+  for (const side of [-1, 1]) {
+    p.rod(new Vector3(side * 5.55, -0.06, 1.6), new Vector3(side * 5.55, -0.06, 3.5), 0.07, grey); // missile rail
+    p.add(new BoxGeometry(0.04, 0.03, 1.2), paint(0xd9dee3, 0.5), side * 5.5, 0.04, 2.6); // tip stripe
+  }
 
-  // One tall fin with its rudder.
-  p.fin({ span: 3.1, rootChord: 3.4, tipChord: 1.1, sweep: 2.5, thickness: 0.05, root: new Vector3(0, 0.6, 2.3) }, 0.72, dark, 0.2, 2.7);
+  // One tall fin, darker, with its rudder and a number.
+  p.fin({ span: 3.2, rootChord: 3.8, tipChord: 1.2, sweep: 2.8, thickness: 0.045, root: new Vector3(0, 0.6, 2.1) }, 0.72, dark, 0.25, 2.8);
+  const number = new MeshStandardMaterial({ map: textTexture('01', '#eef1f4'), transparent: true, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 });
+  for (const side of [-1, 1]) {
+    const plate = p.add(new PlaneGeometry(2.6, 0.43), number, side * 0.075, 1.9, 4.1);
+    plate.rotation.y = (side * Math.PI) / 2;
+    plate.castShadow = false;
+  }
+  // Two small fins under the tail, splayed outwards.
+  for (const side of [-1, 1]) {
+    const keel = new Group();
+    keel.position.set(side * 0.75, -0.45, 3.6);
+    keel.rotation.z = Math.PI + side * 0.35;
+    p.object.add(keel);
+    const skin = new Mesh(
+      wing({ span: 0.7, rootChord: 1.5, tipChord: 0.6, sweep: 0.7, dihedral: 0, thickness: 0.05, root: new Vector3(), side: 1 }, 0, 0.7, { roundTip: true }).rotateZ(Math.PI / 2),
+      dark,
+    );
+    skin.castShadow = true;
+    keel.add(skin);
+  }
 
   // All-moving tailplanes, drooping a little.
   for (const side of [-1, 1] as const) {
     const pivot = new Group();
-    pivot.position.set(side * 1.55, -0.05, 4.9);
-    pivot.rotation.z = side * -0.08;
+    pivot.position.set(side * 1.7, 0.0, 5.0);
+    pivot.rotation.z = side * -0.1;
     p.object.add(pivot);
     const half = new Mesh(
-      wing({ span: 2.1, rootChord: 1.8, tipChord: 0.7, sweep: 1.2, dihedral: 0, thickness: 0.04, root: new Vector3(-side * 0.85, 0, -0.7), side }, 0, 2.1, { roundTip: true }),
+      wing({ span: 2.2, rootChord: 2.0, tipChord: 0.8, sweep: 1.4, dihedral: 0, thickness: 0.04, root: new Vector3(-side * 0.9, 0, -0.8), side }, 0, 2.2, { roundTip: true }),
       light,
     );
     half.castShadow = true;
@@ -548,13 +576,14 @@ function fighter(): AircraftModel {
     p.surfaces.elevators.push(pivot);
   }
 
-  // The afterburner flame, lit at full power (see Aircraft).
+  // The afterburner: a glowing nozzle and a flickering flame, lit at full power (see Aircraft).
   const flame = new Group();
-  flame.position.set(0, 0, 6.7);
-  const flameMaterial = new MeshBasicMaterial({ color: 0xff9a3c, transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false, toneMapped: false });
-  flame.add(new Mesh(new ConeGeometry(0.42, 3.2, 16, 1, true).rotateX(Math.PI / 2).translate(0, 0, 1.6), flameMaterial));
-  const core = new Mesh(new ConeGeometry(0.25, 1.6, 12, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.8), new MeshBasicMaterial({ color: 0xbfe4ff, transparent: true, opacity: 0.9, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
-  flame.add(core);
+  flame.position.set(0, 0.04, 7.1);
+  const hot = (color: number, opacity: number) =>
+    new MeshBasicMaterial({ color, transparent: true, opacity, blending: AdditiveBlending, depthWrite: false, toneMapped: false });
+  flame.add(new Mesh(new CircleGeometry(0.48, 20), hot(0xffb04d, 0.95)));
+  flame.add(new Mesh(new ConeGeometry(0.46, 3.6, 18, 1, true).rotateX(Math.PI / 2).translate(0, 0, 1.8), hot(0xff8a2a, 0.75)));
+  flame.add(new Mesh(new ConeGeometry(0.28, 1.8, 14, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.9), hot(0xbfe4ff, 0.85)));
   flame.visible = false;
   p.object.add(flame);
   p.afterburner = flame;
@@ -562,14 +591,14 @@ function fighter(): AircraftModel {
   // Retractable gear.
   const tyre = rubber();
   const leg = metal();
-  p.rod(new Vector3(0, -0.6, -5.0), new Vector3(0, -1.3, -5.0), 0.06, leg, p.gear);
-  p.wheel(0.3, 0, -1.3, -5.0, tyre, leg);
+  p.rod(new Vector3(0, -0.6, -4.6), new Vector3(0, -1.3, -4.6), 0.06, leg, p.gear);
+  p.wheel(0.3, 0, -1.3, -4.6, tyre, leg);
   for (const side of [-1, 1]) {
-    p.rod(new Vector3(side * 0.9, -0.5, 0.9), new Vector3(side * 1.15, -1.28, 0.9), 0.07, leg, p.gear);
-    p.wheel(0.34, side * 1.15, -1.26, 0.9, tyre, leg);
+    p.rod(new Vector3(side * 0.95, -0.45, 1.0), new Vector3(side * 1.2, -1.26, 1.0), 0.07, leg, p.gear);
+    p.wheel(0.34, side * 1.2, -1.26, 1.0, tyre, leg);
   }
 
-  p.navLights(new Vector3(5.28, -0.1, 2.7), new Vector3(0, 3.65, 5.4));
+  p.navLights(new Vector3(5.55, -0.06, 2.6), new Vector3(0, 3.75, 5.6));
   return p.finish();
 }
 

@@ -870,8 +870,14 @@ function frame(time: number): void {
       progress.save();
       checkBadges(); // height, speed and distance badges
     }
+    // The physics moves in fixed steps, so the plane's position is up to one step behind "now", by a
+    // varying amount each frame (at a fighter's 1200 km/h, nearly 3 m): drawn as it is, it would shake.
+    // Draw it (and aim the camera) where it is at this very moment.
+    const lead = model.crashed || model.onGround ? 0 : accumulator;
+    model.position.addScaledVector(model.velocity, lead);
     aircraft!.update(model, dt);
     rig.update(model, dt);
+    model.position.addScaledVector(model.velocity, -lead);
     sound.update(model);
   }
   input.endFrame();

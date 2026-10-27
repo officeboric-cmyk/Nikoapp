@@ -111,9 +111,9 @@ export const AIRCRAFT: AircraftType[] = [
     emoji: '🛩️',
     description: 'Vojni avion, brži od zvuka! Ima mitraljez.',
     engine: 'jet',
-    camera: { distance: 17, height: 5, cockpit: [0, 1.2, -4.9] },
-    exhausts: [[0, 0, 6.7]],
-    gun: [-0.62, 0.32, -4.2],
+    camera: { distance: 17, height: 5, cockpit: [0, 1.3, -5.5] },
+    exhausts: [[0, 0.04, 7.1]],
+    gun: [-0.62, 0.32, -4.1],
     spec: {
       maxThrust: 22,
       maxSpeed: 360, // m/s, just over the speed of sound with the afterburner
@@ -125,7 +125,7 @@ export const AIRCRAFT: AircraftType[] = [
       groundSteerRate: 0.6,
       turnRate: 1.4,
       gearHeight: 1.6,
-      wingspan: 10.6,
+      wingspan: 11,
       maxLoad: 9,
       endurance: 420, // the afterburner drinks fuel
       glideRatio: 8,
