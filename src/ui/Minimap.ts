@@ -49,7 +49,8 @@ export class Minimap {
   }
 
   /** `others` are the other planes in the sky (small white dots); `goal` is the mission's goal (orange ring). */
-  update(model: FlightModel, others: Vector3[] = [], goal: Target | null = null): void {
+  /** `foes`: the other pilots when playing with friends, drawn bigger and in their colours. */
+  update(model: FlightModel, others: Vector3[] = [], goal: Target | null = null, foes: { x: number; z: number; color: string }[] = []): void {
     const ctx = this.ctx;
     ctx.drawImage(this.background, 0, 0);
 
@@ -69,6 +70,17 @@ export class Minimap {
       const [x, y] = this.toMap(other.x, other.z);
       ctx.beginPath();
       ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    for (const foe of foes) {
+      const [x, y] = this.toMap(foe.x, foe.z);
+      ctx.fillStyle = foe.color;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 4.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }

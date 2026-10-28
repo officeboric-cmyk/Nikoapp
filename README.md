@@ -12,6 +12,12 @@ Arkadni simulator letenja za djecu koji radi u pregledniku (Three.js + TypeScrip
   (u slobodnom letu oko otoka s kojeg kreneš), a mogu se srušiti i drugi avioni (posada iskoči
   padobranima, a nakon minute poleti novi avion) te kuće, zvonici i parkirani avioni (gore, pa se nakon
   minute i pol opet sagrade)
+- 👥 **zračna borba s prijateljima** preko interneta (izbornik → „S prijateljima”): jedan napravi sobu i
+  dobije kod od 4 broja, ostali ga upišu (do 6 pilota). Svi lete lovcima, svaki s druge piste; strelica 🎯 i
+  karta pokazuju protivnike, iznad aviona su imena. Nakon 10 pogodaka pilot iskače padobranom i za
+  4 sekunde je opet na pisti (prvih 5 sekundi nakon starta ne može ga se pogoditi); ljestvica broji
+  obaranja. Preglednici se spajaju izravno (WebRTC, PeerJS) — nema našeg servera, a besplatni javni
+  PeerJS poslužitelj ih samo upozna. Na nekim strogim mrežama (neke škole, firme) spajanje ne uspije
 - 🤖 **autopilot** (`T` ili 🤖): drži visinu, smjer i brzinu (sam vodi gas), u misijama vodi do cilja i
   penje se preko brda na putu; isključi se čim pomakneš palicu ili gas
 - **4 aviokompanije** za putnički avion: Niko Air, Jadran Jet, Galeb Air i Otok Express
@@ -147,6 +153,8 @@ src/
   game/Gun.ts             – mitraljez lovca: meci, pogoci, udari u tlo i more
   world/Parachutes.ts     – posada oborenih aviona na padobranima
   game/Balloons.ts        – baloni-mete
+  game/Dogfight.ts        – zračna borba s prijateljima: tuđi avioni, pogoci, obaranja, ljestvica
+  net/Room.ts             – soba s kodom: spajanje preglednika (PeerJS), domaćin prosljeđuje poruke
   world/islands.ts        – popis otoka i aerodroma (lako dodati nove)
   world/Terrain.ts        – visinske mape otoka, "koliko je visoko tlo ovdje?"
   world/groundDetail.ts   – detalji livade u shaderu (suhi i bujni dijelovi, zrnatost izbliza)

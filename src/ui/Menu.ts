@@ -18,7 +18,7 @@ export interface Choice {
 
 const CHOICE_KEY = 'niko-leti-choice';
 
-type Tab = 'missions' | 'school' | 'free' | 'badges';
+type Tab = 'missions' | 'school' | 'free' | 'badges' | 'friends';
 
 /** What the menu asks the game to do. */
 export interface MenuHandlers {
@@ -32,6 +32,11 @@ export interface MenuHandlers {
   onQuality(quality: Quality): void;
   /** Phones and tablets: steer by tilting (true) or with the on-screen stick. */
   onSteering(tilt: boolean): void;
+  /** Playing with friends: open a new room, join one by its code, go back to flying in it, or leave it. */
+  onHostRoom(): void;
+  onJoinRoom(code: string): void;
+  onFlyInRoom(): void;
+  onLeaveRoom(): void;
 }
 
 /** Fast: sharp enough and smooth on any phone. Pretty: glow around lights and the sun, crisper shadows. */
@@ -91,7 +96,7 @@ export class Menu {
     private readonly handlers: MenuHandlers,
   ) {
     const saved = loadChoice();
-    this.tab = (['free', 'school', 'badges'] as const).find((t) => t === saved?.tab) ?? 'missions';
+    this.tab = (['free', 'school', 'badges', 'friends'] as const).find((t) => t === saved?.tab) ?? 'missions';
     this.time = TIMES.find((t) => t.id === saved?.time)?.id ?? 'day';
     this.weather = WEATHERS.find((w) => w.id === saved?.weather)?.id ?? 'clear';
     this.realControls = saved?.controls !== 'simple';
@@ -171,6 +176,7 @@ export class Menu {
     }
 
     this.buildProfiles();
+    this.buildFriends();
 
     const lessonList = document.getElementById('menu-lessons')!;
     for (const lesson of lessons) {
@@ -259,6 +265,38 @@ export class Menu {
     this.tilt = tilt;
     this.save();
     this.render();
+  }
+
+  /** Playing with friends: make a room or type a friend's code; once in, fly or leave. */
+  private buildFriends(): void {
+    const code = document.getElementById('room-code') as HTMLInputElement;
+    const join = () => {
+      const digits = code.value.replace(/\D/g, '');
+      if (digits.length === 4) this.handlers.onJoinRoom(digits);
+      else this.setRoomStatus('Upiši kod sobe: 4 broja koja ti je rekao prijatelj.', true);
+    };
+    document.getElementById('room-host')!.addEventListener('click', () => this.handlers.onHostRoom());
+    document.getElementById('room-join')!.addEventListener('click', join);
+    code.addEventListener('keydown', (e) => {
+      e.stopPropagation(); // typing the code mustn't fly the plane
+      if (e.key === 'Enter') join();
+    });
+    document.getElementById('room-fly')!.addEventListener('click', () => this.handlers.onFlyInRoom());
+    document.getElementById('room-leave')!.addEventListener('click', () => this.handlers.onLeaveRoom());
+  }
+
+  /** Shows whether we are in a room (its code and pilots) or not. */
+  setRoom(room: { code: string; pilots: string[] } | null): void {
+    document.getElementById('room-out')!.classList.toggle('hidden', room !== null);
+    document.getElementById('room-in')!.classList.toggle('hidden', room === null);
+    if (room) this.setRoomStatus(`Soba ${room.code} · piloti: ${room.pilots.join(', ')}. Reci prijateljima kod ${room.code}!`);
+    else this.setRoomStatus('');
+  }
+
+  setRoomStatus(text: string, warn = false): void {
+    const status = document.getElementById('room-status')!;
+    status.textContent = text;
+    status.classList.toggle('warn', warn);
   }
 
   /** The pilot picker: each child has their own stars, islands and badges. */
@@ -378,6 +416,7 @@ export class Menu {
     document.getElementById('tab-missions')!.classList.toggle('hidden', this.tab !== 'missions');
     document.getElementById('tab-school')!.classList.toggle('hidden', this.tab !== 'school');
     document.getElementById('tab-badges')!.classList.toggle('hidden', this.tab !== 'badges');
+    document.getElementById('tab-friends')!.classList.toggle('hidden', this.tab !== 'friends');
     if (this.tab === 'badges') this.renderBadges();
     for (const button of this.root.querySelectorAll<HTMLButtonElement>('#menu-lessons .choice')) {
       button.querySelector('.stars')!.textContent = starText(this.progress.missionStars(button.dataset.id!));

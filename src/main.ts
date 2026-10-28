@@ -10,6 +10,8 @@ import { Graphics } from './core/Graphics';
 import { Input, PAD_A } from './core/Input';
 import { Autopilot, type AutopilotRefusal } from './game/Autopilot';
 import { Balloons } from './game/Balloons';
+import { BACK_AFTER, Dogfight, HEALTH, SLOT_COLORS, type DogfightEvent } from './game/Dogfight';
+import { Room, type RoomError } from './net/Room';
 import { newBadges } from './game/badges';
 import { AMMO, Gun } from './game/Gun';
 import { collision, planeAhead } from './game/collisions';
@@ -111,11 +113,22 @@ const menu = new Menu(AIRCRAFT, terrain.airports, MISSIONS, LESSONS, progress, {
   onRealism: (realism) => (model.realism = realism),
   onQuality: setQuality,
   onSteering: (tilt) => void setSteering(tilt, true),
+  onHostRoom: () => void openRoom(null),
+  onJoinRoom: (code) => void openRoom(code),
+  onFlyInRoom: () => {
+    menu.hide();
+    setPaused(false);
+  },
+  onLeaveRoom: () => {
+    leaveRoom();
+    menu.setRoom(null);
+  },
 });
 const missionDone = document.getElementById('mission-done')!;
 const gearButton = document.getElementById('gear-btn')!;
 
 function startFreeFlight(picked: Choice): void {
+  leaveRoom();
   endMission();
   begin(picked);
   if (gun) {
@@ -128,6 +141,7 @@ function startFreeFlight(picked: Choice): void {
 }
 
 function startMission(def: MissionDef): void {
+  leaveRoom();
   endMission();
   const picked: Choice = {
     aircraft: AIRCRAFT.find((a) => a.id === def.aircraft)!,
@@ -143,6 +157,7 @@ function startMission(def: MissionDef): void {
 }
 
 function startLesson(def: LessonDef): void {
+  leaveRoom();
   endMission();
   const picked: Choice = {
     aircraft: AIRCRAFT.find((a) => a.id === 'trainer')!,
@@ -321,6 +336,8 @@ function respawn(): void {
   mission?.restart();
   if (mission instanceof LessonRun) mission.placeStart(model);
   aircraft!.update(model, 0);
+  aircraft!.object.visible = true; // it hides while its pilot floats down after being shot down
+  dogfight?.restart();
   rig.snap(model);
   touch.reset();
   flightLog.reset();
@@ -488,6 +505,7 @@ function dropLoad(now: number): void {
 
 document.getElementById('pause-btn')!.addEventListener('click', () => {
   dropFocus();
+  if (dogfight) return noPause();
   if (started && !menu.visible) setPaused(!paused);
 });
 
@@ -611,6 +629,127 @@ function updateFuel(dt: number, now: number): void {
   }
 }
 
+// --- Playing with friends: a dogfight in a room (see game/Dogfight.ts and net/Room.ts) ---
+let dogfight: Dogfight | null = null;
+const FIGHTER = AIRCRAFT.find((a) => a.id === 'fighter')!;
+const scoreboard = document.getElementById('scoreboard')!;
+let scoreboardHtml = '';
+
+/** Makes a new room (`code` null) or joins a friend's; then everyone flies a fighter in it. */
+async function openRoom(code: string | null): Promise<void> {
+  // Inside the tap, while the browser still lets the sound start and the screen go full.
+  sound.start();
+  if (touch.enabled) goFullscreen();
+  const { name, avatar } = progress.profile;
+  menu.setRoomStatus(code ? `Spajam se na sobu ${code}…` : 'Otvaram sobu…');
+  try {
+    const room = code ? await Room.join(code, name, avatar) : await Room.host(name, avatar);
+    startDogfight(room);
+  } catch (error) {
+    const why: Record<RoomError, string> = {
+      'not-found': `Soba ${code} ne postoji (ili je zatvorena). Provjeri kod.`,
+      full: 'Ta soba je puna (6 pilota).',
+      network: 'Spajanje nije uspjelo — provjeri internet i pokušaj opet.',
+      closed: 'Soba je zatvorena.',
+    };
+    menu.setRoomStatus(why[error as RoomError] ?? why.network, true);
+  }
+}
+
+function startDogfight(room: Room): void {
+  leaveRoom();
+  endMission();
+  dogfight = new Dogfight(room, scene, effects, terrain, FIGHTER);
+  dogfight.onEvent = onDogfightEvent;
+  begin({ aircraft: FIGHTER, airline: airlineById(undefined), airport: terrain.airports[dogfight.startAirport()] });
+  menu.hide();
+  updateRoomInMenu();
+  hud.flash(
+    room.isHost
+      ? `👥 Soba ${room.code} je otvorena! Reci prijateljima kod ${room.code} — oni ga upišu pod „S prijateljima”`
+      : `👥 U sobi ${room.code} si! Poleti i nađi protivnike — strelica 🎯 ih pokazuje`,
+    timer.getElapsed(),
+    6,
+  );
+}
+
+function leaveRoom(): void {
+  if (!dogfight) return;
+  dogfight.dispose();
+  dogfight = null;
+  scoreboard.classList.add('hidden');
+  scoreboardHtml = '';
+}
+
+function noPause(): void {
+  hud.flash('U igri s prijateljima nema pauze — oni lete dalje!', timer.getElapsed(), 2);
+}
+
+function updateRoomInMenu(): void {
+  if (!dogfight) return menu.setRoom(null);
+  menu.setRoom({ code: dogfight.room.code, pilots: dogfight.board.map((b) => b.player.name) });
+}
+
+function onDogfightEvent(event: DogfightEvent): void {
+  const now = timer.getElapsed();
+  switch (event.kind) {
+    case 'join':
+      hud.flash(`👋 U sobu stiže ${event.name}!`, now, 3);
+      updateRoomInMenu();
+      break;
+    case 'left':
+      hud.flash(`👋 ${event.name} više nije u sobi`, now, 3);
+      updateRoomInMenu();
+      break;
+    case 'hit-me':
+      hud.flash(`💥 Pogodak od: ${event.by}! (još ${event.health}/${HEALTH})`, now, 1.5, true);
+      break;
+    case 'down-me':
+      // Our pilot bails out; the plane is gone, and in a moment we start again on our runway.
+      dogfight!.bailOut(model);
+      model.crashed = true;
+      aircraft!.object.visible = false;
+      setAutopilot(false);
+      respawnAt = now + BACK_AFTER;
+      hud.flash(`🪂 Oboren si (${event.by})! Iskačeš padobranom — za tren si opet na pisti`, now, BACK_AFTER, true);
+      sound.crash();
+      break;
+    case 'scored':
+      hud.flash(`🏆 Pogodak! ${event.victim} iskače padobranom 🪂`, now, 3);
+      sound.reward();
+      break;
+    case 'other-down':
+      hud.flash(`💥 ${event.by} 🎯 ${event.victim} — padobran 🪂`, now, 2.5);
+      break;
+    case 'closed':
+      hud.flash('Soba je zatvorena (domaćin je otišao). Letiš dalje bez prijatelja.', now, 4, true);
+      leaveRoom();
+      menu.setRoom(null);
+      break;
+  }
+}
+
+/** Everyone's score, in their colours, under the instruments. */
+function updateScoreboard(): void {
+  if (!dogfight) return;
+  const rows = dogfight.board
+    .map(({ player, score, me }) => {
+      const dot = `<span class="dot" style="background:${SLOT_COLORS[player.slot % SLOT_COLORS.length]}"></span>`;
+      return `<div class="${me ? 'me' : ''}">${dot}${escapeHtml(player.name)} ${score}</div>`;
+    })
+    .join('');
+  const html = `<div class="code">Soba ${dogfight.room.code}</div>${rows}`;
+  if (html !== scoreboardHtml) {
+    scoreboardHtml = html;
+    scoreboard.innerHTML = html;
+  }
+  scoreboard.classList.toggle('hidden', !started || menu.visible);
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
 /** The trigger: X, or Space / the gamepad's A in the air (on the ground they brake), or the 🔫 button. */
 function triggerHeld(): boolean {
   const airborne = !model.onGround;
@@ -627,7 +766,7 @@ function updateGun(dt: number, now: number): void {
   }
   if (!gun) return;
   const balloons = mission instanceof MissionRun ? (mission.balloons ?? null) : practice;
-  const { fired, strikes } = gun.update(dt, model, triggerHeld() && !model.onGround, terrain, [balloons, traffic, world]);
+  const { fired, strikes } = gun.update(dt, model, triggerHeld() && !model.onGround, terrain, [balloons, traffic, world, dogfight]);
   if (fired) sound.gunshot();
   const burst = strikes.filter((s) => s.kind === 'balloon').length;
   for (const strike of strikes) {
@@ -742,6 +881,7 @@ function checkDiscovery(now: number): void {
 /** Where the arrow at the top points: the mission's goal, or else the nearest airport once it is far enough away. */
 function currentTarget(): Target | null {
   if (mission) return mission.target(model);
+  if (dogfight) return dogfight.nearestFoe(model.position);
   const { airport, distance } = terrain.nearestAirport(model.position.x, model.position.z);
   if (distance < SHOW_AIRPORT_BEYOND) return null;
   return { name: `✈ ${airport.name}`, x: airport.center.x, z: airport.center.z };
@@ -819,7 +959,10 @@ function frame(time: number): void {
     if (input.wasTapped('KeyT') && !paused) toggleAutopilot();
     if (input.wasTapped('KeyV') && !paused) cycleFlaps();
     if (input.wasTapped('KeyB') && !paused) dropLoad(now);
-    if (input.wasTapped('KeyP')) setPaused(!paused);
+    if (input.wasTapped('KeyP')) {
+      if (dogfight) noPause();
+      else setPaused(!paused);
+    }
     if (input.wasTapped('KeyN')) respawn();
     if (input.wasTapped('KeyM')) {
       radio.muted = sound.toggleMute();
@@ -882,6 +1025,11 @@ function frame(time: number): void {
   }
   input.endFrame();
   if (!paused) traffic.update(dt);
+  // The others fly on even while our menu is open: keep drawing them and telling them where we are.
+  if (dogfight) {
+    dogfight.update(dt, model, triggerHeld() && !model.onGround && !paused);
+    updateScoreboard();
+  }
   // A shot-down plane hitting the ground close by is heard.
   for (const crash of traffic.crashes.splice(0)) if (crash.distanceTo(model.position) < 2500) sound.crash();
 
@@ -896,7 +1044,7 @@ function frame(time: number): void {
   updateHint(now, altitude);
   hud.update(model, now, altitude);
   const target = started ? currentTarget() : null;
-  minimap.update(model, traffic.positions, mission ? target : null);
+  minimap.update(model, traffic.positions, mission ? target : null, dogfight?.foes);
   instruments.update(model, target);
   touch.update(model.throttle);
   updateGunsight();

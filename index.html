@@ -61,6 +61,7 @@
 
     <div id="message"></div>
     <div id="gunsight" class="hidden"></div>
+    <div id="scoreboard" class="hidden"></div>
 
     <div id="help">
       <h2>Kako letjeti</h2>
@@ -119,7 +120,22 @@
           <button class="tab" type="button" data-tab="missions">🎯 Misije</button>
           <button class="tab" type="button" data-tab="school">🎓 Škola</button>
           <button class="tab" type="button" data-tab="free">✈ Slobodno letenje</button>
+          <button class="tab" type="button" data-tab="friends">👥 S prijateljima</button>
           <button class="tab" type="button" data-tab="badges">🏅 Značke</button>
+        </div>
+        <div id="tab-friends" class="tab-page">
+          <p class="friends-intro">🛩️ Zračna borba lovcima s prijateljima preko interneta, do 6 pilota. Pogođeni pilot iskoči padobranom i vraća se na pistu.</p>
+          <div id="room-out" class="friends-actions">
+            <button id="room-host" class="big-btn" type="button">➕ Napravi sobu</button>
+            <span class="friends-or">ili</span>
+            <input id="room-code" type="text" inputmode="numeric" maxlength="4" placeholder="kod" aria-label="Kod sobe" autocomplete="off" />
+            <button id="room-join" class="big-btn" type="button">➡️ Uđi</button>
+          </div>
+          <div id="room-in" class="friends-actions hidden">
+            <button id="room-fly" class="big-btn" type="button">🛩️ Leti!</button>
+            <button id="room-leave" class="big-btn" type="button">🚪 Izađi iz sobe</button>
+          </div>
+          <p id="room-status"></p>
         </div>
         <div id="tab-badges" class="tab-page">
           <div id="menu-badges" class="badge-grid"></div>
